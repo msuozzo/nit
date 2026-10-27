@@ -8,6 +8,9 @@ import (
 	"image/png"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -154,28 +157,77 @@ type faceSet struct {
 
 var shotFaces [4]*faceSet // regular, bold, italic, bold italic
 
+// fontRef names one face of a font file, which may be a collection.
+type fontRef struct {
+	path  string
+	index int
+}
+
+// shotFonts picks a monospace family in shotFaces' four styles, and fonts to
+// fall back on for glyphs it lacks. macOS has Menlo, and elsewhere fontconfig
+// chooses.
+func shotFonts() (styles [4]fontRef, fallbacks []fontRef, err error) {
+	if runtime.GOOS == "darwin" {
+		for i := range styles {
+			styles[i] = fontRef{"/System/Library/Fonts/Menlo.ttc", i}
+		}
+		return styles, []fontRef{{"/System/Library/Fonts/Apple Symbols.ttf", 0}, {"/Library/Fonts/Arial Unicode.ttf", 0}}, nil
+	}
+	match := func(args ...string) ([]fontRef, error) {
+		out, err := exec.Command("fc-match", append([]string{"-f", "%{file}\t%{index}\n"}, args...)...).Output()
+		if err != nil {
+			return nil, fmt.Errorf("fc-match: %w", err)
+		}
+		var refs []fontRef
+		for _, ln := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			path, index, _ := strings.Cut(ln, "\t")
+			n, _ := strconv.Atoi(index)
+			refs = append(refs, fontRef{path, n})
+		}
+		return refs, nil
+	}
+	for i, style := range []string{"", ":bold", ":italic", ":bold:italic"} {
+		refs, err := match("monospace" + style)
+		if err != nil {
+			return styles, nil, err
+		}
+		styles[i] = refs[0]
+	}
+	fallbacks, err = match("-s", "monospace")
+	return styles, fallbacks[:min(len(fallbacks), 12)], err
+}
+
 func loadFaces() error {
 	if shotFaces[0] != nil {
 		return nil
 	}
-	data, err := os.ReadFile("/System/Library/Fonts/Menlo.ttc")
+	styles, fallbackRefs, err := shotFonts()
 	if err != nil {
 		return err
 	}
-	coll, err := opentype.ParseCollection(data)
-	if err != nil {
-		return err
+	files := map[string]*opentype.Collection{}
+	load := func(r fontRef) (*sfnt.Font, error) {
+		c, ok := files[r.path]
+		if !ok {
+			data, err := os.ReadFile(r.path)
+			if err != nil {
+				return nil, err
+			}
+			if c, err = opentype.ParseCollection(data); err != nil {
+				return nil, err
+			}
+			files[r.path] = c
+		}
+		return c.Font(r.index)
 	}
 	var fallbacks []*sfnt.Font
-	for _, p := range []string{"/System/Library/Fonts/Apple Symbols.ttf", "/Library/Fonts/Arial Unicode.ttf"} {
-		if d, err := os.ReadFile(p); err == nil {
-			if f, err := opentype.Parse(d); err == nil {
-				fallbacks = append(fallbacks, f)
-			}
+	for _, r := range fallbackRefs {
+		if f, err := load(r); err == nil {
+			fallbacks = append(fallbacks, f)
 		}
 	}
-	for i := range shotFaces {
-		f, err := coll.Font(i)
+	for i, r := range styles {
+		f, err := load(r)
 		if err != nil {
 			return err
 		}

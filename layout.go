@@ -192,6 +192,7 @@ func (lay *Layout) addCard(c *Card) {
 	w := max(c.x1-c.x0-3, 8)
 	n := 1
 	if c.Kind == CardCompose {
+		w = max(c.x1-c.x0-4, 8) // inside the outline
 		n += max(len(c.Ed.wrap(w)), 2) + 1
 		c.wrap = nil
 		if c.Err != "" {

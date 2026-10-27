@@ -646,19 +646,19 @@ func (a *App) drawCard(r *Row, y, i int) {
 		a.set(a.px+a.lay.half(), y, '│', th.st(th.Faint, th.Bg))
 	}
 	x0, x1 := a.px+c.x0, a.px+c.x1
-	bar := [...]tcell.Color{CardReview: th.Amber, CardSent: th.Green, CardCompose: th.Accent}[c.Kind]
 	bg := th.CardBg
 	if cursor {
 		bg = mix(bg, th.Accent, 0.10)
 		a.set(a.px, y, '▎', th.st(th.Accent, th.Bg))
 	}
 	a.fill(x0, x1, y, th.st(th.Fg, bg))
-	a.set(x0, y, '▎', th.st(bar, bg))
-	tx, tx1 := x0+2, x1-1
 	if c.Kind == CardCompose {
-		a.drawCompose(c, r.Sub, y, tx, tx1, bg)
+		a.drawCompose(c, r.Sub, y, x0, x1, bg)
 		return
 	}
+	bar := [...]tcell.Color{CardReview: th.Amber, CardSent: th.Green}[c.Kind]
+	a.set(x0, y, '▎', th.st(bar, bg))
+	tx, tx1 := x0+2, x1-1
 	head, info, action, body := "➜ sent", lineLabel(c)+" · "+ago(c.At), "dismiss", th.Muted
 	if c.Kind == CardReview {
 		head, info, action, body = "✎ review", "line "+strconv.Itoa(c.Comment.Open), "resolve", th.Fg
@@ -675,33 +675,49 @@ func (a *App) drawCard(r *Row, y, i int) {
 	a.buttonR(tx1, y, x+2, action, th.st(th.Muted, bg), th.st(th.Accent, bg), func(int) { a.resolve(c) })
 }
 
-// drawCompose draws row sub of the compose card: heading, editor lines,
-// error lines, then the button row.
-func (a *App) drawCompose(c *Card, sub, y, tx, tx1 int, bg tcell.Color) {
+// drawCompose draws row sub of the compose card in an accent outline that
+// sets it apart from the diff: the heading on the top edge, editor lines,
+// error lines, then the buttons on the bottom edge.
+func (a *App) drawCompose(c *Card, sub, y, x0, x1 int, bg tcell.Color) {
 	th := a.th
+	tx, tx1 := x0+2, x1-2
 	vl := c.Ed.wrap(tx1 - tx)
 	nEd := max(len(vl), 2)
 	nErr := 0
 	if c.Err != "" {
 		nErr = len(c.wrap)
 	}
+	edge := th.st(th.Accent, bg)
+	l, r := '│', '│'
+	if sub == 0 || sub > nEd+nErr {
+		l, r = '╭', '╮'
+		if sub > 0 {
+			l, r = '╰', '╯'
+		}
+		for x := x0 + 1; x < x1-1; x++ {
+			a.set(x, y, '─', edge)
+		}
+	}
+	a.set(x0, y, l, edge)
+	a.set(x1-1, y, r, edge)
 	switch {
 	case sub == 0:
-		side := "new"
-		if c.Side == 0 {
-			side = "old"
+		info := " · new side "
+		switch {
+		case c.To == 0:
+			info = " "
+		case c.Side == 0:
+			info = " · old side "
 		}
-		x := a.put(tx, y, tx1, "✎ comment on "+lineLabel(c), th.st(th.Accent, bg).Bold(true))
-		if c.To > 0 {
-			x = a.put(x, y, tx1, " · "+side+" side", th.st(th.Subtle, bg))
-		}
+		x := a.put(tx, y, tx1, " ✎ comment on "+lineLabel(c), th.st(th.Accent, bg).Bold(true))
+		x = a.put(x, y, tx1, info, th.st(th.Subtle, bg))
 		if c.Busy != "" {
-			a.putR(tx1, y, x+2, c.Busy, th.st(th.Amber, bg))
+			a.putR(tx1, y, x+2, " "+c.Busy+" ", th.st(th.Amber, bg))
 		}
 	case sub <= nEd:
 		k := sub - 1
 		ebg := th.Bg
-		a.fill(tx-1, tx1, y, th.st(th.Fg, ebg))
+		a.fill(tx-1, tx1+1, y, th.st(th.Fg, ebg))
 		if k < len(vl) {
 			v := vl[k]
 			a.put(tx, y, tx1, string(c.Ed.lines[v.row][v.a:v.b]), th.st(th.Fg, ebg))
@@ -713,7 +729,7 @@ func (a *App) drawCompose(c *Card, sub, y, tx, tx1 int, bg tcell.Color) {
 			a.s.ShowCursor(tx+cc, y)
 			a.s.SetCursorStyle(tcell.CursorStyleSteadyBar)
 		}
-		a.hots = append(a.hots, hot{y, tx - 1, tx1, func(x int) {
+		a.hots = append(a.hots, hot{y, tx - 1, tx1 + 1, func(x int) {
 			if k < len(vl) {
 				c.Ed.setVis(vl[k], x-tx)
 			} else if len(vl) > 0 {
@@ -723,7 +739,7 @@ func (a *App) drawCompose(c *Card, sub, y, tx, tx1 int, bg tcell.Color) {
 	case sub <= nEd+nErr:
 		a.put(tx, y, tx1, c.wrap[sub-nEd-1], th.st(th.Red, bg))
 	default:
-		x := tx
+		x := a.put(tx, y, tx1, " ", edge)
 		if a.repo.CanSend() {
 			x = a.button(x, y, tx1, " ⌃⏎ Send ", th.st(th.Bg, th.Accent).Bold(true), th.st(th.Bg, th.Fg).Bold(true), func(int) { a.submit(true) }) + 1
 		}
@@ -733,7 +749,7 @@ func (a *App) drawCompose(c *Card, sub, y, tx, tx1 int, bg tcell.Color) {
 		}
 		x = a.button(x, y, tx1, " ⌃⌥⏎ Comment in file ", inline, th.st(th.Bg, th.Fg), func(int) { a.submit(false) }) + 1
 		x = a.button(x, y, tx1, " esc Cancel ", th.st(th.Muted, bg), th.st(th.Fg, th.Raised), func(int) { a.closeCompose(true) })
-		a.putR(tx1, y, x+2, "⇧⏎ newline", th.st(th.Subtle, bg))
+		a.putR(tx1, y, x+2, " ⇧⏎ newline ", th.st(th.Subtle, bg))
 	}
 }
 

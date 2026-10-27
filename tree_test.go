@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -40,5 +41,29 @@ func TestBuildTree(t *testing.T) {
 	}
 	if n := buildTree(nil); len(n.Kids) != 0 || len(flatten(n)) != 0 {
 		t.Errorf("empty tree = %+v", n)
+	}
+}
+
+func TestNameOrder(t *testing.T) {
+	for _, tc := range []struct{ first, second string }{
+		{"form.go", "form_test.go"},
+		{"form.go", "form.txt"},
+		{".review", "a"},
+		{"COMMIT_MSG", "COMMIT_MSG.abc"},
+		{"main.go", "Makefile"},
+		{"README", "readme.md"},
+		{"a_b.go", "ab.go"},
+		{"package.gohtml", "packages.gohtml"},
+	} {
+		if nameOrder(tc.first, tc.second) >= 0 || nameOrder(tc.second, tc.first) <= 0 {
+			t.Errorf("%q should sort before %q", tc.first, tc.second)
+		}
+	}
+	var got []string
+	for _, r := range flatten(buildTree([]*File{{Path: "x/form_test.go"}, {Path: "x/form.go"}, {Path: "a.go"}, {Path: ".review/COMMIT_MSG"}})) {
+		got = append(got, r.N.Name)
+	}
+	if want := []string{".review", "COMMIT_MSG", "x", "form.go", "form_test.go", "a.go"}; !slices.Equal(got, want) {
+		t.Errorf("tree order = %q, want %q", got, want)
 	}
 }

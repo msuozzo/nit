@@ -43,7 +43,7 @@ func buildTree(files []*File) *TreeNode {
 			n.Kids = n.Kids[0].Kids
 		}
 		slices.SortStableFunc(n.Kids, func(a, b *TreeNode) int {
-			return cmp.Or(cmp.Compare(b2i(b.Dir), b2i(a.Dir)), strings.Compare(a.Name, b.Name))
+			return cmp.Or(cmp.Compare(b2i(b.Dir), b2i(a.Dir)), nameOrder(a.Name, b.Name))
 		})
 		for _, k := range n.Kids {
 			fix(k)
@@ -51,6 +51,20 @@ func buildTree(files []*File) *TreeNode {
 	}
 	fix(root)
 	return root
+}
+
+// nameOrder compares names by their stem first, ignoring case, so form.go
+// sorts before form_test.go and .review, with an empty stem, comes first.
+func nameOrder(a, b string) int {
+	sa, sb := stem(a), stem(b)
+	return cmp.Or(strings.Compare(strings.ToLower(sa), strings.ToLower(sb)), strings.Compare(sa, sb), strings.Compare(a, b))
+}
+
+func stem(name string) string {
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		return name[:i]
+	}
+	return name
 }
 
 func splitPath(p string) (dir []string, base string) {

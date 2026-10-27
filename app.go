@@ -93,8 +93,9 @@ type App struct {
 	toastColor tcell.Color
 	toastUntil time.Time
 	stale      bool
-	pending    string // first key of a two-key command
-	count      int    // count prefix being typed
+	changed    []string // files that differ on disk, while stale
+	pending    string   // first key of a two-key command
+	count      int      // count prefix being typed
 
 	W, H           int
 	px, py, pw, ph int // diff pane
@@ -193,8 +194,8 @@ func (a *App) load() {
 	}()
 }
 
-// poll checks whether the diff changed on disk every few seconds while the
-// window has focus, and as soon as it regains focus, like the web page.
+// poll checks the diff every few seconds while the window has focus, and as
+// soon as it regains focus, like the web page.
 func (a *App) poll() {
 	t := time.NewTicker(2 * time.Second)
 	for {
@@ -202,14 +203,41 @@ func (a *App) poll() {
 		case <-t.C:
 		case <-a.pollNow:
 		}
-		r := a.polled.Load()
-		if r == nil || !a.focused.Load() {
-			continue
-		}
-		if h, err := r.PatchHash(); err == nil {
-			a.post(func() { a.stale = a.stale || a.repo == r && h != a.d.PatchHash })
+		if a.focused.Load() {
+			a.check()
 		}
 	}
+}
+
+// check notes whether the diff on screen changed on disk, and in which files.
+func (a *App) check() {
+	r := a.polled.Load()
+	if r == nil {
+		return
+	}
+	if h, files, err := r.Peek(); err == nil {
+		a.post(func() {
+			if a.repo == r {
+				a.stale, a.changed = h != a.d.PatchHash, changedFiles(a.d.FileHashes, files)
+			}
+		})
+	}
+}
+
+func changedFiles(old, new map[string]string) []string {
+	var out []string
+	for f, h := range new {
+		if old[f] != h {
+			out = append(out, f)
+		}
+	}
+	for f := range old {
+		if _, ok := new[f]; !ok {
+			out = append(out, f)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // applyDiff installs a fresh snapshot, carrying over loaded contents, sent
@@ -252,7 +280,7 @@ func (a *App) applyDiff(d *review.Snapshot, err error) {
 	for i, f := range a.files {
 		f.idx = i
 	}
-	a.byPath, a.d, a.err, a.stale = byPath, d, "", false
+	a.byPath, a.d, a.err, a.stale, a.changed = byPath, d, "", false, nil
 	if a.toast == "refreshing…" {
 		a.toast = ""
 	}
@@ -281,7 +309,7 @@ func (a *App) applyDiff(d *review.Snapshot, err error) {
 // openDiff shows d, loaded from r, in place of the current diff.
 func (a *App) openDiff(r *review.Repo, d *review.Snapshot) {
 	a.closeCompose(true)
-	a.repo, a.d, a.lay, a.err, a.stale, a.anim.on = r, nil, nil, "", false, false
+	a.repo, a.d, a.lay, a.err, a.stale, a.changed, a.anim.on = r, nil, nil, "", false, nil, false
 	a.files, a.byPath, a.tree, a.trows = nil, map[string]*File{}, nil, nil
 	a.top, a.cur, a.hx, a.sel, a.treeTop, a.treeCur = 0, 0, 0, -1, 0, 0
 	a.searching, a.matches, a.matchAt = false, nil, nil

@@ -13,7 +13,7 @@ import (
 // {"op": "open", "dir": "/src/ws", "from": "main"}. The reply is a line
 // reading "ok" or the error.
 type command struct {
-	Op             string // open, refresh or quit
+	Op             string // open, check, or quit
 	Dir            string // open: where the diff runs
 	review.Options        // open: the diff, without send, which nit keeps
 }
@@ -69,8 +69,8 @@ func (a *App) command(c net.Conn, send string) error {
 			return err
 		}
 		a.post(func() { a.openDiff(r, d) })
-	case "refresh":
-		a.post(a.refresh)
+	case "check":
+		a.check()
 	case "quit":
 		a.post(func() { a.quit = true })
 	default:

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -133,6 +134,9 @@ func (a *App) draw() {
 	a.drawPane()
 	a.drawScrollbar()
 	a.drawStatus()
+	if a.stale {
+		a.drawChanged()
+	}
 	if a.help {
 		a.drawHelp()
 	}
@@ -817,9 +821,6 @@ func (a *App) drawStatus() {
 	}
 	rx := a.W - 1
 	rx = a.buttonR(rx, y, x+2, "? help", th.st(th.Subtle, bg), th.st(th.Accent, bg), func(int) { a.help = true }) - 3
-	if a.stale {
-		rx = a.buttonR(rx, y, x+2, " ● diff changed · r to refresh ", th.st(th.Amber, bg), th.st(th.Bg, th.Amber), func(int) { a.load() }) - 2
-	}
 	if a.toast != "" && time.Now().Before(a.toastUntil) {
 		a.putR(rx, y, x+2, ellipsis(a.toast, max(rx-x-2, 0)), th.st(a.toastColor, bg))
 	}
@@ -833,6 +834,32 @@ func (a *App) matchInfo() string {
 		return "no matches"
 	}
 	return fmt.Sprintf("%d/%d", a.mi+1, len(a.matches))
+}
+
+// drawChanged floats the files that changed on disk over the bottom right of
+// the diff pane. Clicking it refreshes.
+func (a *App) drawChanged() {
+	th := a.th
+	const most = 8
+	head, files := "● diff changed · r to refresh", a.changed
+	if len(files) > most {
+		files = append(slices.Clip(files[:most-1]), fmt.Sprintf("and %d more", len(files)-most+1))
+	}
+	w := width(head)
+	for _, f := range files {
+		w = max(w, width(f)+2)
+	}
+	w, h := min(w+4, a.pw), len(files)+3
+	x0, y0 := a.px+a.pw-w, a.py+a.ph-h
+	ix, iy, ix1, _ := a.box(x0, y0, w, h, "")
+	bg := th.Raised
+	a.put(ix, iy, ix1, head, th.st(th.Amber, bg).Bold(true))
+	for i, f := range files {
+		a.put(ix+2, iy+1+i, ix1, ellipsisLeft(f, ix1-ix-2), th.st(th.Fg, bg))
+	}
+	for y := y0; y < y0+h; y++ {
+		a.hots = append(a.hots, hot{y, x0, x0 + w, func(int) { a.refresh() }})
+	}
 }
 
 // box draws a bordered panel and returns its inner rectangle.

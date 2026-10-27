@@ -7,7 +7,7 @@
 //	nit -r @             # one revision
 //	nit -f main -t @     # between two revisions
 //	nit --send CMD       # pipe comments to CMD (default $SKEPSIS_SEND)
-//	nit --listen SOCK    # take open, refresh and quit commands on SOCK
+//	nit --listen SOCK    # take open, check, and quit commands on SOCK
 package main
 
 import (
@@ -35,7 +35,7 @@ func main() {
 	}
 	flag.BoolVar(&o.Git, "git", false, "use git even in a jj repo")
 	flag.StringVar(&o.Send, "send", os.Getenv("SKEPSIS_SEND"), "shell command comments are sent to, as JSON on stdin")
-	sock := flag.String("listen", "", "unix socket to take open, refresh and quit commands on")
+	sock := flag.String("listen", "", "unix socket to take open, check, and quit commands on")
 	shot := flag.String("shot", "", "render to this PNG instead of the terminal (for development)")
 	size := flag.String("size", "200x56", "screen size for -shot")
 	script := flag.String("script", "", "keys and mouse events to replay for -shot")

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -327,8 +328,8 @@ func TestJJ(t *testing.T) {
 	if old, new, _ := r.Contents("missing.txt", ""); old != nil || new != nil {
 		t.Errorf("missing file = %v, %v", old, new)
 	}
-	if h, err := r.PatchHash(); err != nil || h != s.PatchHash {
-		t.Errorf("PatchHash = %q, %v, want %q", h, err, s.PatchHash)
+	if h, files, err := r.Peek(); err != nil || h != s.PatchHash || !maps.Equal(files, s.FileHashes) {
+		t.Errorf("Peek = %q, %v, %v, want %q, %v", h, files, err, s.PatchHash, s.FileHashes)
 	}
 }
 

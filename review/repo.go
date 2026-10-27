@@ -283,10 +283,10 @@ func (r *Repo) Load() (*Snapshot, error) {
 	return s, nil
 }
 
-// PatchHash runs the diff and hashes it, to notice changes.
-func (r *Repo) PatchHash() (string, error) {
+// Peek runs the diff and returns its hash and FileHashes, to notice changes.
+func (r *Repo) Peek() (string, map[string]string, error) {
 	patch, err := r.Diff()
-	return hashOf(patch), err
+	return hashOf(patch), FileHashes(patch), err
 }
 
 func hashOf(s string) string {

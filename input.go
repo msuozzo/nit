@@ -612,7 +612,7 @@ func (a *App) press(x, y int) {
 		a.help = false
 		return
 	}
-	for _, h := range a.hots {
+	for _, h := range slices.Backward(a.hots) { // the last drawn is on top
 		if h.y == y && x >= h.x0 && x < h.x1 {
 			h.fn(x)
 			return

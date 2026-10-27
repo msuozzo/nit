@@ -24,7 +24,7 @@ nit -r @                  # changes in revision(s)
 nit -f main -t @          # changes between two revisions
 nit --git -f HEAD         # git, from a commit to the working tree
 nit -r @ src/             # only these paths
-nit --listen SOCK         # take open, refresh, and quit commands on SOCK
+nit --listen SOCK         # take open, check, and quit commands on SOCK
 ```
 
 `--send CMD`, or `SKEPSIS_SEND` in the environment, makes Send pipe each
@@ -36,7 +36,12 @@ set to the repository root.
 unix socket sends one line of JSON and reads back `ok` or an error.
 `{"op": "open", "dir": "/src/ws", "from": "main"}` shows another diff, with
 keys named after the diff flags.
-`{"op": "refresh"}` reloads and `{"op": "quit"}` exits.
+`{"op": "check"}` looks for changes on disk right away and `{"op": "quit"}`
+exits.
+
+When the diff changes on disk, a notice in the bottom right lists the files
+that changed until `r` reloads. nit checks every 2 s while it has focus, when
+it regains focus, and on `check`.
 
 nit picks light or dark to match the terminal's background, and shows the
 diff side by side when its pane is 150 columns or wider.

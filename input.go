@@ -212,8 +212,7 @@ func (a *App) normalKey(k string) {
 	case "y":
 		a.yank(a.curPos())
 	case "r":
-		a.load()
-		a.flash("refreshing…", a.th.Muted)
+		a.refresh()
 	case "tab", "S-tab":
 		if a.tw > 0 {
 			a.focusTree = !a.focusTree

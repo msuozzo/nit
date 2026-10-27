@@ -7,11 +7,13 @@
 //	nit -r @             # one revision
 //	nit -f main -t @     # between two revisions
 //	nit --send CMD       # pipe comments to CMD (default $SKEPSIS_SEND)
+//	nit --listen SOCK    # take open, refresh and quit commands on SOCK
 package main
 
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -33,11 +35,12 @@ func main() {
 	}
 	flag.BoolVar(&o.Git, "git", false, "use git even in a jj repo")
 	flag.StringVar(&o.Send, "send", os.Getenv("SKEPSIS_SEND"), "shell command comments are sent to, as JSON on stdin")
+	sock := flag.String("listen", "", "unix socket to take open, refresh and quit commands on")
 	shot := flag.String("shot", "", "render to this PNG instead of the terminal (for development)")
 	size := flag.String("size", "200x56", "screen size for -shot")
 	script := flag.String("script", "", "keys and mouse events to replay for -shot")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: nit [-r REVSETS | -f FROM -t TO] [--git] [--send CMD] [paths...]\n")
+		fmt.Fprintf(os.Stderr, "usage: nit [-r REVSETS | -f FROM -t TO] [--git] [--send CMD] [--listen SOCK] [paths...]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -67,6 +70,14 @@ func main() {
 		}
 		return
 	}
+	// Listen before the screen starts, so an error shows in the terminal.
+	var l net.Listener
+	if *sock != "" {
+		if l, err = listen(*sock); err != nil {
+			fatal(err)
+		}
+		defer l.Close()
+	}
 	s, err := tcell.NewScreen()
 	if err == nil {
 		err = s.Init()
@@ -75,7 +86,11 @@ func main() {
 		fatal(err)
 	}
 	defer s.Fini()
-	newApp(s, repo, th).run()
+	a := newApp(s, repo, th)
+	if l != nil {
+		go a.serve(l, o.Send)
+	}
+	a.run()
 }
 
 func fatal(err error) {

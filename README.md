@@ -24,12 +24,19 @@ nit -r @                  # changes in revision(s)
 nit -f main -t @          # changes between two revisions
 nit --git -f HEAD         # git, from a commit to the working tree
 nit -r @ src/             # only these paths
+nit --listen SOCK         # take open, refresh, and quit commands on SOCK
 ```
 
 `--send CMD`, or `SKEPSIS_SEND` in the environment, makes Send pipe each
 comment to a shell command instead. nit runs it with `sh -c` in the current
 directory, with the comment as one JSON object on stdin and `SKEPSIS_ROOT`
 set to the repository root.
+
+`--listen` lets another program steer a running nit. Each connection to the
+unix socket sends one line of JSON and reads back `ok` or an error.
+`{"op": "open", "dir": "/src/ws", "from": "main"}` shows another diff, with
+keys named after the diff flags.
+`{"op": "refresh"}` reloads and `{"op": "quit"}` exits.
 
 nit picks light or dark to match the terminal's background, and shows the
 diff side by side when its pane is 150 columns or wider.

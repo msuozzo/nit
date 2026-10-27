@@ -107,8 +107,8 @@ type App struct {
 	lastClick                           time.Time
 	lastClickXY                         [2]int
 
-	sem     chan struct{} // bounds concurrent repo reads
-	pollOn  atomic.Bool
+	sem     chan struct{}               // bounds concurrent repo reads
+	polled  atomic.Pointer[review.Repo] // repo of the diff on screen
 	focused atomic.Bool
 	pollNow chan struct{}
 	quit    bool
@@ -182,9 +182,14 @@ func (a *App) handle(ev tcell.Event) {
 }
 
 func (a *App) load() {
+	r := a.repo
 	go func() {
-		d, err := a.repo.Load()
-		a.post(func() { a.applyDiff(d, err) })
+		d, err := r.Load()
+		a.post(func() {
+			if a.repo == r {
+				a.applyDiff(d, err)
+			}
+		})
 	}()
 }
 
@@ -197,11 +202,12 @@ func (a *App) poll() {
 		case <-t.C:
 		case <-a.pollNow:
 		}
-		if !a.pollOn.Load() || !a.focused.Load() {
+		r := a.polled.Load()
+		if r == nil || !a.focused.Load() {
 			continue
 		}
-		if h, err := a.repo.PatchHash(); err == nil {
-			a.post(func() { a.stale = a.stale || a.d != nil && h != a.d.PatchHash })
+		if h, err := r.PatchHash(); err == nil {
+			a.post(func() { a.stale = a.stale || a.repo == r && h != a.d.PatchHash })
 		}
 	}
 }
@@ -250,7 +256,7 @@ func (a *App) applyDiff(d *review.Snapshot, err error) {
 	if a.toast == "refreshing…" {
 		a.toast = ""
 	}
-	a.pollOn.Store(true)
+	a.polled.Store(a.repo)
 	a.prefetchQ = map[*File]bool{}
 	a.trows = flatten(a.tree)
 	if a.compose != nil {
@@ -270,6 +276,23 @@ func (a *App) applyDiff(d *review.Snapshot, err error) {
 			a.highlight(f)
 		}
 	}
+}
+
+// openDiff shows d, loaded from r, in place of the current diff.
+func (a *App) openDiff(r *review.Repo, d *review.Snapshot) {
+	a.closeCompose(true)
+	a.repo, a.d, a.lay, a.err, a.stale, a.anim.on = r, nil, nil, "", false, false
+	a.files, a.byPath, a.tree, a.trows = nil, map[string]*File{}, nil, nil
+	a.top, a.cur, a.hx, a.sel, a.treeTop, a.treeCur = 0, 0, 0, -1, 0, 0
+	a.searching, a.matches, a.matchAt = false, nil, nil
+	a.polled.Store(nil)
+	clear(a.drafts) // drafts belong to the diff they were typed on
+	a.applyDiff(d, nil)
+}
+
+func (a *App) refresh() {
+	a.load()
+	a.flash("refreshing…", a.th.Muted)
 }
 
 // highlight colors the hunk lines of a file until its full contents load.
@@ -312,9 +335,10 @@ func (a *App) ensureContents(f *File, then func()) {
 		return
 	}
 	f.content = contentLoading
+	r := a.repo
 	go func() {
 		a.sem <- struct{}{}
-		old, new, err := a.repo.Contents(f.Path, f.OldPath)
+		old, new, err := r.Contents(f.Path, f.OldPath)
 		var hl [2]map[int][]Seg
 		if err == nil {
 			hl = fullHL(f, splitLines(old), splitLines(new))
@@ -549,8 +573,9 @@ func (a *App) toggleViewed(f *File) {
 	if viewed && inFile {
 		a.jumpFile(a.files[min(f.idx+1, len(a.files)-1)])
 	}
+	r := a.repo
 	go func() {
-		if err := a.repo.SetViewed(f.Path, f.Hash, viewed); err != nil {
+		if err := r.SetViewed(f.Path, f.Hash, viewed); err != nil {
 			a.post(func() { a.flash("✗ viewed: "+err.Error(), a.th.Red) })
 		}
 	}()
@@ -786,7 +811,7 @@ func (a *App) submit(send bool) {
 	if text == "" {
 		return
 	}
-	f := c.File
+	f, r := c.File, a.repo
 	var do func() error
 	var then func()
 	var ok string
@@ -799,7 +824,7 @@ func (a *App) submit(send bool) {
 			req.Blob = ""
 		}
 		c.Busy, ok = "sending…", "✓ sent to the session"
-		do = func() error { return a.repo.Send(req) }
+		do = func() error { return r.Send(req) }
 		then = func() {
 			f.Sent = append(f.Sent, &Card{Kind: CardSent, File: f, Side: c.Side, Line: c.Line, From: c.From, To: c.To, Body: text, At: time.Now()})
 		}
@@ -812,7 +837,7 @@ func (a *App) submit(send bool) {
 	default:
 		lineText, _ := f.sideText(1, c.To)
 		c.Busy, ok = "writing…", "✓ comment written to "+f.name()
-		do = func() error { return a.repo.AddComment(f.Path, c.To, lineText, text) }
+		do = func() error { return r.AddComment(f.Path, c.To, lineText, text) }
 		then = a.load
 	}
 	if do == nil {
@@ -850,10 +875,10 @@ func (a *App) resolve(c *Card) {
 		}
 		a.relayout()
 	case CardReview:
-		f, line := c.File, c.Comment.Open
+		f, line, r := c.File, c.Comment.Open, a.repo
 		c.Body = "resolving…"
 		go func() {
-			err := a.repo.RemoveComment(f.Path, line)
+			err := r.RemoveComment(f.Path, line)
 			a.post(func() {
 				if err != nil {
 					a.flash("✗ "+err.Error(), a.th.Red)

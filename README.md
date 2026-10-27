@@ -24,20 +24,7 @@ nit -r @                  # changes in revision(s)
 nit -f main -t @          # changes between two revisions
 nit --git -f HEAD         # git, from a commit to the working tree
 nit -r @ src/             # only these paths
-nit --listen SOCK         # take open, check, and quit commands on SOCK
 ```
-
-`--send CMD`, or `NIT_SEND` in the environment, makes Send pipe each comment
-to a shell command instead. nit runs it with `sh -c` in the current
-directory, with the comment as one JSON object on stdin and `NIT_ROOT` set
-to the repository root.
-
-`--listen` lets another program steer a running nit. Each connection to the
-unix socket sends one line of JSON and reads back `ok` or an error.
-`{"op": "open", "dir": "/src/ws", "from": "main"}` shows another diff, with
-keys named after the diff flags.
-`{"op": "check"}` looks for changes on disk right away and `{"op": "quit"}`
-exits.
 
 When the diff changes on disk, a notice in the bottom right lists the files
 that changed until `r` reloads. nit checks every 2 s while it has focus, when
@@ -56,6 +43,32 @@ With `-r` or `-f`/`-t`, each reviewed commit's description leads the diff as
 an added file, `.review/COMMIT_MSG` (or `.review/COMMIT_MSG.<id>` per commit
 when there are several), so prose gets comments like code. A real
 `.review/COMMIT_MSG` in the working copy takes its place.
+
+## Sending comments
+
+Send delivers a comment straight to your coding agent, quoting the code it's
+on, so the agent can act on it while you keep reviewing. The [agent
+skill](#agent-skill) sets this up for agents like Claude Code. Send also
+works where in-file comments can't: on removed lines, and on diffs that don't
+end at the working copy.
+
+Send runs `--send CMD`, or `NIT_SEND` from the environment, with `sh -c` for
+each comment. The command gets `NIT_ROOT` set to the repository root, and the
+comment on stdin as one line of JSON whose `prompt` field holds the whole
+comment as a message. So any program can take comments, a log for instance:
+
+```sh
+NIT_SEND='jq -c . >> ~/review-comments.jsonl'
+```
+
+## Scripting nit
+
+`nit --listen SOCK` lets another program take certain actions in nit. Each
+connection to the unix socket sends one line of JSON and reads back `ok` or
+an error. `{"op": "open", "dir": "/src/ws", "from": "main"}` shows another
+diff, with keys named after the diff flags.
+`{"op": "check"}` looks for changes on disk right away, and `{"op": "quit"}`
+exits.
 
 ## Agent skill
 

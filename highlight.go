@@ -13,7 +13,7 @@ func highlightLines(path string, lines []string) [][]Seg {
 	if len(lines) == 0 || !syntax.Supported(path) {
 		return segs
 	}
-	toks, _ := syntax.Highlight(path, []byte(strings.Join(lines, "\n")+"\n"))
+	toks, _ := syntax.Classify(path, []byte(strings.Join(lines, "\n")+"\n"))
 	off, t := 0, 0
 	for i, l := range lines {
 		end := off + len(l)

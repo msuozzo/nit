@@ -18,10 +18,13 @@ const (
 // where the line has none on that side.
 type Line struct {
 	Kind     Kind
+	Width    int32 // Text's columns on screen, tabs as four. int32 keeps Line at 64 B
 	Old, New int
 	Text     string
 	Words    []Span // byte ranges that differ from the paired line
 }
+
+func textWidth(s string) int32 { return int32(width(strings.ReplaceAll(s, "\t", "    "))) }
 
 // Span is the byte range [A, B) of a string.
 type Span struct{ A, B int }
@@ -78,7 +81,8 @@ func parsePatch(patch string) []*File {
 				continue
 			}
 			if c == ' ' || c == '-' || c == '+' {
-				l := &Line{Text: strings.TrimSuffix(ln[min(1, len(ln)):], "\r")}
+				text := strings.TrimSuffix(ln[min(1, len(ln)):], "\r")
+				l := &Line{Text: text, Width: textWidth(text)}
 				if c != '+' {
 					l.Old, oldN, remOld = oldN, oldN+1, remOld-1
 				}

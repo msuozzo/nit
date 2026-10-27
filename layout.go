@@ -33,6 +33,7 @@ type Layout struct {
 	W       int
 	fileAt  map[*File]int
 	changes []int // first row of each run of changed lines
+	textW   int   // widest line, in columns
 }
 
 // Column geometry. Unified rows are
@@ -170,7 +171,14 @@ func buildLayout(files []*File, split bool, w int, compose *Card) *Layout {
 	return lay
 }
 
-func (lay *Layout) add(r Row) { lay.Rows = append(lay.Rows, r) }
+func (lay *Layout) add(r Row) {
+	for _, l := range []*Line{r.L, r.R} {
+		if l != nil {
+			lay.textW = max(lay.textW, int(l.Width))
+		}
+	}
+	lay.Rows = append(lay.Rows, r)
+}
 
 // addCard sizes a card to its side's code column and adds its rows.
 func (lay *Layout) addCard(c *Card) {

@@ -107,6 +107,8 @@ type App struct {
 	btnDown                             bool
 	lastClick                           time.Time
 	lastClickXY                         [2]int
+	wheelH, wheelV                      float64   // recent sideways and vertical wheel ticks
+	wheelAt                             time.Time // when they were last counted
 
 	sem     chan struct{}               // bounds concurrent repo reads
 	polled  atomic.Pointer[review.Repo] // repo of the diff on screen
@@ -461,6 +463,15 @@ func (a *App) maxTop() int {
 func (a *App) clampTop() { a.top = clamp(a.top, 0, a.maxTop()) }
 
 func (a *App) clampCur() { a.cur = clamp(a.cur, 0, len(a.lay.Rows)-1) }
+
+// maxHX keeps the end of the widest line on screen.
+func (a *App) maxHX() int {
+	room := a.pw - 12
+	if a.lay.Split {
+		room = a.pw/2 - 12
+	}
+	return max(a.lay.textW-room, 0)
+}
 
 func (a *App) scrolloff() int { return min(3, a.ph/5) }
 

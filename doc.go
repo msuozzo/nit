@@ -177,6 +177,7 @@ func (f *File) gapLine(oldStart, newStart, k int) *Line {
 	} else if l.Old-1 < len(f.Old) {
 		l.Text = f.Old[l.Old-1]
 	}
+	l.Width = textWidth(l.Text)
 	return l
 }
 

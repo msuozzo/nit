@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -156,7 +157,7 @@ func (a *App) normalKey(k string) {
 	case "h", "left":
 		a.hx = max(a.hx-8*n, 0)
 	case "l", "right":
-		a.hx += 8 * n
+		a.hx = min(a.hx+8*n, a.maxHX())
 	case "0":
 		a.hx = 0
 	case "H":
@@ -593,12 +594,25 @@ func (a *App) wheel(x, y int, b tcell.ButtonMask, mod tcell.ModMask) {
 	if mod&tcell.ModShift != 0 {
 		dx, dy = dy*4, 0
 	}
+	// Trackpad swipes mix the axes. A tick moves the view sideways only when
+	// two or more sideways ticks clearly lead the last 100 ms or so, so the
+	// strays in a vertical swipe do nothing, and vertically otherwise.
+	decay := math.Exp(-float64(time.Since(a.wheelAt)) / float64(100*time.Millisecond))
+	a.wheelH, a.wheelV, a.wheelAt = a.wheelH*decay, a.wheelV*decay, time.Now()
+	if dx != 0 {
+		a.wheelH++
+	} else {
+		a.wheelV++
+	}
+	if side := a.wheelH > 1.5*a.wheelV && a.wheelH >= 1.8; side != (dx != 0) {
+		return
+	}
 	switch {
 	case a.help:
 	case a.tw > 0 && x < a.tw:
 		a.treeTop = max(a.treeTop+dy, 0)
 	case dx != 0:
-		a.hx = max(a.hx+dx, 0)
+		a.hx = clamp(a.hx+dx, 0, a.maxHX())
 	default:
 		a.scroll(dy)
 	}

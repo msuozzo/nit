@@ -93,6 +93,18 @@ func TestBuildLayout(t *testing.T) {
 	}
 }
 
+func TestTextW(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want int
+	}{{"\tabc", 7}, {"日本語", 6}} {
+		f := mkFile(t, slash, "@@ -1 +1 @@\n-x\n+"+tc.line+"\n")
+		if w := buildLayout([]*File{f}, true, 160, nil).textW; w != tc.want {
+			t.Errorf("textW with %q = %d, want %d", tc.line, w, tc.want)
+		}
+	}
+}
+
 func TestBuildLayoutNotes(t *testing.T) {
 	for _, tc := range []struct {
 		name string

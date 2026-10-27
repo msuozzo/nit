@@ -69,3 +69,17 @@ func TestAsciiLower(t *testing.T) {
 		}
 	}
 }
+
+func TestGlyphNames(t *testing.T) {
+	for in, want := range map[string]string{
+		" ⌃⏎ Send ": " Ctrl+Enter Send ",
+		"⌃⌥⏎  ^o":   "Ctrl+Alt+Enter  ^o",
+		"c  ⏎":      "c  Enter",
+		"⇧wheel":    "Shift+wheel",
+		"^d ^u":     "^d ^u",
+	} {
+		if got := glyphNames.Replace(in); got != want {
+			t.Errorf("glyphNames.Replace(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

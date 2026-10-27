@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -741,15 +742,15 @@ func (a *App) drawCompose(c *Card, sub, y, x0, x1 int, bg tcell.Color) {
 	default:
 		x := a.put(tx, y, tx1, " ", edge)
 		if a.repo.CanSend() {
-			x = a.button(x, y, tx1, " ⌃⏎ Send ", th.st(th.Bg, th.Accent).Bold(true), th.st(th.Bg, th.Fg).Bold(true), func(int) { a.submit(true) }) + 1
+			x = a.button(x, y, tx1, keys(" ⌃⏎ Send "), th.st(th.Bg, th.Accent).Bold(true), th.st(th.Bg, th.Fg).Bold(true), func(int) { a.submit(true) }) + 1
 		}
 		inline := th.st(th.Fg, th.Raised)
 		if !a.repo.CommentsEnabled() || c.Side == 0 || c.To == 0 || c.File.Pseudo {
 			inline = th.st(th.Subtle, th.Raised)
 		}
-		x = a.button(x, y, tx1, " ⌃⌥⏎ Comment in file ", inline, th.st(th.Bg, th.Fg), func(int) { a.submit(false) }) + 1
+		x = a.button(x, y, tx1, keys(" ⌃⌥⏎ Comment in file "), inline, th.st(th.Bg, th.Fg), func(int) { a.submit(false) }) + 1
 		x = a.button(x, y, tx1, " esc Cancel ", th.st(th.Muted, bg), th.st(th.Fg, th.Raised), func(int) { a.closeCompose(true) })
-		a.putR(tx1, y, x+2, " ⇧⏎ newline ", th.st(th.Subtle, bg))
+		a.putR(tx1, y, x+2, keys(" ⇧⏎ newline "), th.st(th.Subtle, bg))
 	}
 }
 
@@ -926,10 +927,10 @@ var helpSections = []helpSection{
 		{"tab", "file tree focus"},
 	}},
 	{"Review", [][2]string{
-		{"c  ⏎", "comment on line or file"},
+		{keys("c  ⏎"), "comment on line or file"},
 		{"V", "select lines"},
-		{"^⏎  ^s", "send to the session"},
-		{"^⌥⏎  ^o", "write into the source"},
+		{keys("⌃⏎  ^s"), "send to the session"},
+		{keys("⌃⌥⏎  ^o"), "write into the source"},
 		{"dd", "resolve, dismiss card"},
 		{"v", "viewed"},
 		{"x X", "expand context, file"},
@@ -958,7 +959,13 @@ func helpHeight(ss []helpSection) int {
 // screen.
 func (a *App) drawHelp() {
 	th := a.th
-	const colW = 40
+	kw := 15 // key column, widened for keys spelled out off macOS
+	for _, s := range helpSections {
+		for _, k := range s.keys {
+			kw = max(kw, width(k[0])+2)
+		}
+	}
+	colW := kw + 25
 	left, right := helpSections[:1], helpSections[1:]
 	if a.W < 2*colW+6 {
 		left, right = helpSections, nil
@@ -976,7 +983,7 @@ func (a *App) drawHelp() {
 			y++
 			for _, k := range s.keys {
 				a.put(x, y, x+colW, k[0], th.st(th.Fg, bg).Bold(true))
-				a.put(x+15, y, x+colW, k[1], th.st(th.Muted, bg))
+				a.put(x+kw, y, x+colW, k[1], th.st(th.Muted, bg))
 				y++
 			}
 			y++
@@ -984,5 +991,16 @@ func (a *App) drawHelp() {
 	}
 	draw(left, ix)
 	draw(right, ix+colW)
-	a.put(ix, y0+h-2, x0+w-2, "mouse: click, drag the gutter to comment, wheel, ⇧wheel", th.st(th.Subtle, bg))
+	a.put(ix, y0+h-2, x0+w-2, keys("mouse: click, drag the gutter to comment, wheel, ⇧wheel"), th.st(th.Subtle, bg))
+}
+
+// glyphNames spells out the modifier glyphs that only Mac keyboards print.
+var glyphNames = strings.NewReplacer("⌃", "Ctrl+", "⌥", "Alt+", "⇧", "Shift+", "⏎", "Enter")
+
+// keys writes a key combination in the platform's notation.
+func keys(s string) string {
+	if runtime.GOOS == "darwin" {
+		return s
+	}
+	return glyphNames.Replace(s)
 }

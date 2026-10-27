@@ -70,7 +70,7 @@ func (r *Repo) Send(c Comment) error {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "sh", "-c", r.send)
 	cmd.Dir = r.dir
-	cmd.Env = append(os.Environ(), "SKEPSIS_ROOT="+r.Root)
+	cmd.Env = append(os.Environ(), "NIT_ROOT="+r.Root, "SKEPSIS_ROOT="+r.Root)
 	cmd.Stdin = bytes.NewReader(append(data, '\n'))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

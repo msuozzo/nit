@@ -245,7 +245,7 @@ func TestDiffArgs(t *testing.T) {
 func TestSend(t *testing.T) {
 	dir := t.TempDir()
 	r := &Repo{Root: "/r", VCS: "jj", dir: dir, args: []string{"-r", "@"}, inline: true,
-		send: "cat > sent.json; echo $SKEPSIS_ROOT > root"}
+		send: "cat > sent.json; echo $NIT_ROOT $SKEPSIS_ROOT > root"}
 	c := Comment{File: "a.go", Side: "additions", Lines: [2]int{3, 4}, Text: "hm", Blob: "abc",
 		Code: []CodeRun{{Lines: [2]int{2, 5}, Text: "x\ny\nz\nw"}}}
 	if err := r.Send(c); err != nil {
@@ -265,8 +265,8 @@ func TestSend(t *testing.T) {
 	if !strings.Contains(string(b), `"blob":"abc"`) || !strings.HasSuffix(string(b), "}\n") {
 		t.Errorf("payload text %q", b)
 	}
-	if root, _ := os.ReadFile(filepath.Join(dir, "root")); string(root) != "/r\n" {
-		t.Errorf("SKEPSIS_ROOT = %q", root)
+	if root, _ := os.ReadFile(filepath.Join(dir, "root")); string(root) != "/r /r\n" {
+		t.Errorf("NIT_ROOT and SKEPSIS_ROOT = %q", root)
 	}
 	r.send = "cat > sent.json"
 	r.Send(Comment{Text: "x"})

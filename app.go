@@ -870,7 +870,7 @@ func (a *App) submit(send bool) {
 	var ok string
 	switch {
 	case send && !a.repo.CanSend():
-		c.Err = "no --send command (pass --send or set SKEPSIS_SEND)"
+		c.Err = "no --send command (pass --send or set NIT_SEND)"
 	case send:
 		req := review.Comment{File: f.Path, Side: sideName(c.Side), Lines: [2]int{c.From, c.To}, Text: text}
 		if c.To > 0 {

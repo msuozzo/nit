@@ -6,11 +6,12 @@
 //	nit                  # jj: fork_point(trunk() | @) to @, git: merge base to the working tree
 //	nit -r @             # one revision
 //	nit -f main -t @     # between two revisions
-//	nit --send CMD       # pipe comments to CMD (default $SKEPSIS_SEND)
+//	nit --send CMD       # pipe comments to CMD (default $NIT_SEND)
 //	nit --listen SOCK    # take open, check, and quit commands on SOCK
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"net"
@@ -35,7 +36,7 @@ func main() {
 	}
 	flag.BoolVar(&o.Git, "git", false, "use git even in a jj repo")
 	colorblind := flag.Bool("colorblind", false, "color additions blue and deletions yellow")
-	flag.StringVar(&o.Send, "send", os.Getenv("SKEPSIS_SEND"), "shell command comments are sent to, as JSON on stdin")
+	flag.StringVar(&o.Send, "send", cmp.Or(os.Getenv("NIT_SEND"), os.Getenv("SKEPSIS_SEND")), "shell command comments are sent to, as JSON on stdin")
 	sock := flag.String("listen", "", "unix socket to take open, check, and quit commands on")
 	shot := flag.String("shot", "", "render to this PNG instead of the terminal (for development)")
 	size := flag.String("size", "200x56", "screen size for -shot")

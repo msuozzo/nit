@@ -27,10 +27,10 @@ nit -r @ src/             # only these paths
 nit --listen SOCK         # take open, check, and quit commands on SOCK
 ```
 
-`--send CMD`, or `SKEPSIS_SEND` in the environment, makes Send pipe each
-comment to a shell command instead. nit runs it with `sh -c` in the current
-directory, with the comment as one JSON object on stdin and `SKEPSIS_ROOT`
-set to the repository root.
+`--send CMD`, or `NIT_SEND` in the environment, makes Send pipe each comment
+to a shell command instead. nit runs it with `sh -c` in the current
+directory, with the comment as one JSON object on stdin and `NIT_ROOT` set
+to the repository root.
 
 `--listen` lets another program steer a running nit. Each connection to the
 unix socket sends one line of JSON and reads back `ok` or an error.
@@ -89,7 +89,8 @@ with skepsis's data formats:
 - viewed state and the saved light or dark choice, in
   `~/.local/share/skepsis/`
 - `<review>` comment blocks written into the working copy
-- the `--send` JSON payload and prompt
+- the `--send` JSON payload and prompt, and `SKEPSIS_SEND` and `SKEPSIS_ROOT`
+  beside `NIT_SEND` and `NIT_ROOT`
 
 ## License
 

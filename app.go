@@ -491,7 +491,7 @@ func (a *App) follow() {
 	}
 	so := a.scrolloff()
 	switch {
-	case a.cur < a.top+1+so && a.lay.Rows[a.cur].Kind == RowFile:
+	case a.cur < a.top && a.lay.Rows[a.cur].Kind == RowFile:
 		a.top = a.cur
 	case a.cur < a.top+1+so:
 		a.top = a.cur - 1 - so

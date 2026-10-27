@@ -262,9 +262,9 @@ func (a *App) toggleSplit() {
 
 func (a *App) toggleTheme() {
 	if a.th.Dark {
-		a.th = lightTheme()
+		a.th = lightTheme(a.th.Colorblind)
 	} else {
-		a.th = darkTheme()
+		a.th = darkTheme(a.th.Colorblind)
 	}
 }
 

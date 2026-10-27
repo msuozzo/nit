@@ -44,7 +44,9 @@ that changed until `r` reloads. nit checks every 2 s while it has focus, when
 it regains focus, and on `check`.
 
 nit picks light or dark to match the terminal's background, and shows the
-diff side by side when its pane is 150 columns or wider.
+diff side by side when its pane is 150 columns or wider. `--colorblind`
+colors additions blue and deletions yellow, which red-green colorblind eyes
+tell apart better than green and red.
 
 Press `?` in nit for the keyboard shortcuts.
 

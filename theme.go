@@ -6,7 +6,7 @@ import (
 )
 
 type Theme struct {
-	Dark bool
+	Dark, Colorblind bool
 
 	Bg, Panel, Raised         tcell.Color
 	Fg, Muted, Subtle, Faint  tcell.Color
@@ -34,10 +34,13 @@ func mix(a, b tcell.Color, t float64) tcell.Color {
 	return tcell.NewRGBColor(f(ar, br), f(ag, bg), f(ab, bb))
 }
 
-func darkTheme() *Theme {
+// darkTheme and lightTheme follow GitHub's palettes. Colorblind ones color
+// additions blue and deletions yellow, which red-green colorblind eyes tell
+// apart, and move hunk rows from blue to purple.
+func darkTheme(colorblind bool) *Theme {
 	bg := hex("#0d1117")
 	t := &Theme{
-		Dark: true, Bg: bg, Panel: hex("#010409"), Raised: hex("#161b22"),
+		Dark: true, Colorblind: colorblind, Bg: bg, Panel: hex("#010409"), Raised: hex("#161b22"),
 		Fg: hex("#e6edf3"), Muted: hex("#9198a1"), Subtle: hex("#6e7681"), Faint: hex("#3d444d"),
 		Border: hex("#30363d"), Accent: hex("#4493f8"),
 		Green: hex("#3fb950"), Red: hex("#f85149"), Amber: hex("#d29922"), Purple: hex("#ab7df8"),
@@ -50,13 +53,20 @@ func darkTheme() *Theme {
 	t.Match, t.MatchCur = hex("#ffe100"), hex("#ff8c1a")
 	t.Thumb, t.Track = hex("#3d444d"), t.Panel
 	t.syntaxColors("#ff7b72", "#a5d6ff", "#79c0ff", "#8b949e", "#ffa657", "#d2a8ff")
+	if colorblind {
+		add, del := hex("#388bfd"), hex("#d29922")
+		t.Green, t.Red = hex("#58a6ff"), hex("#e3b341")
+		t.AddBg, t.AddNum, t.AddWord = mix(bg, add, 0.18), mix(bg, add, 0.35), mix(bg, add, 0.50)
+		t.DelBg, t.DelNum, t.DelWord = mix(bg, del, 0.18), mix(bg, del, 0.35), mix(bg, del, 0.50)
+		t.HunkBg = mix(bg, t.Purple, 0.10)
+	}
 	return t
 }
 
-func lightTheme() *Theme {
+func lightTheme(colorblind bool) *Theme {
 	bg := hex("#ffffff")
 	t := &Theme{
-		Bg: bg, Panel: hex("#f6f8fa"), Raised: hex("#f6f8fa"),
+		Colorblind: colorblind, Bg: bg, Panel: hex("#f6f8fa"), Raised: hex("#f6f8fa"),
 		Fg: hex("#1f2328"), Muted: hex("#59636e"), Subtle: hex("#818b98"), Faint: hex("#d1d9e0"),
 		Border: hex("#d1d9e0"), Accent: hex("#0969da"),
 		Green: hex("#1a7f37"), Red: hex("#d1242f"), Amber: hex("#9a6700"), Purple: hex("#8250df"),
@@ -69,6 +79,12 @@ func lightTheme() *Theme {
 	t.Match, t.MatchCur = hex("#ffe100"), hex("#ff8c1a")
 	t.Thumb, t.Track = hex("#c8d1da"), t.Panel
 	t.syntaxColors("#cf222e", "#0a3069", "#0550ae", "#6e7781", "#953800", "#8250df")
+	if colorblind {
+		t.Green, t.Red = hex("#0969da"), hex("#9a6700")
+		t.AddBg, t.AddNum, t.AddWord = hex("#ddf4ff"), hex("#b6e3ff"), hex("#b6e3ff")
+		t.DelBg, t.DelNum, t.DelWord = hex("#fff8c5"), hex("#fae17d"), hex("#fae17d")
+		t.HunkBg = hex("#fbefff")
+	}
 	return t
 }
 

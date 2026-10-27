@@ -34,13 +34,14 @@ func main() {
 		flag.StringVar(&o.To, name, "", "show changes to this revision")
 	}
 	flag.BoolVar(&o.Git, "git", false, "use git even in a jj repo")
+	colorblind := flag.Bool("colorblind", false, "color additions blue and deletions yellow")
 	flag.StringVar(&o.Send, "send", os.Getenv("SKEPSIS_SEND"), "shell command comments are sent to, as JSON on stdin")
 	sock := flag.String("listen", "", "unix socket to take open, check, and quit commands on")
 	shot := flag.String("shot", "", "render to this PNG instead of the terminal (for development)")
 	size := flag.String("size", "200x56", "screen size for -shot")
 	script := flag.String("script", "", "keys and mouse events to replay for -shot")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: nit [-r REVSETS | -f FROM -t TO] [--git] [--send CMD] [--listen SOCK] [paths...]\n")
+		fmt.Fprintf(os.Stderr, "usage: nit [-r REVSETS | -f FROM -t TO] [--git] [--send CMD] [--listen SOCK] [--colorblind] [paths...]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -60,9 +61,9 @@ func main() {
 			dark = d
 		}
 	}
-	th := lightTheme()
+	th := lightTheme(*colorblind)
 	if dark {
-		th = darkTheme()
+		th = darkTheme(*colorblind)
 	}
 	if *shot != "" {
 		if err := runShot(repo, th, *shot, *size, *script); err != nil {

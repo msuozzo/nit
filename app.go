@@ -71,6 +71,7 @@ type App struct {
 	prefetchQ map[*File]bool
 
 	showTree  bool
+	treeSet   bool // b chose showTree, so it holds on a narrow screen
 	treeW     int
 	treeTop   int
 	treeCur   int
@@ -433,7 +434,7 @@ func (a *App) geom() {
 	a.W, a.H = a.s.Size()
 	a.treeW = clamp(a.treeW, 16, max(16, a.W-40))
 	a.tw = 0
-	if a.showTree && a.W-a.treeW >= 90 {
+	if a.showTree && (a.treeSet || a.W-a.treeW >= 90) {
 		a.tw = a.treeW
 	}
 	a.px, a.py = 0, 1

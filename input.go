@@ -179,7 +179,7 @@ func (a *App) normalKey(k string) {
 	case "t":
 		a.toggleTheme()
 	case "b":
-		a.showTree, a.focusTree = !a.showTree, false
+		a.showTree, a.treeSet, a.focusTree = a.tw == 0, true, false
 		a.geom()
 	case "/":
 		a.searching, a.query = true, ""

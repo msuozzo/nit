@@ -3,6 +3,8 @@ package main
 import (
 	"slices"
 	"testing"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 func TestChangedFiles(t *testing.T) {
@@ -37,6 +39,24 @@ func TestFollow(t *testing.T) {
 		a := &App{lay: &Layout{Rows: rows}, ph: 30, top: tc.top, cur: tc.cur}
 		if a.follow(); a.top != tc.want {
 			t.Errorf("follow from top %d to row %d: top = %d, want %d", tc.top, tc.cur, a.top, tc.want)
+		}
+	}
+}
+
+func TestTreeToggle(t *testing.T) {
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	sim.SetSize(110, 40)
+	a := &App{s: sim, lay: &Layout{Rows: []Row{{Kind: RowFile}}}, showTree: true, treeW: 34}
+	a.geom()
+	for i, want := range []int{0, 34, 0, 34} {
+		if i > 0 {
+			a.normalKey("b")
+		}
+		if a.tw != want {
+			t.Errorf("after %d b presses at 110 columns: tree width %d, want %d", i, a.tw, want)
 		}
 	}
 }

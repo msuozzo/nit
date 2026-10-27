@@ -5,6 +5,8 @@ agent. It's heavily inspired by, and compatible with,
 [skepsis](https://github.com/oxidecomputer/skepsis), Oxide Computer's
 browser-based review tool.
 
+https://github.com/user-attachments/assets/295c3933-41a3-4932-a837-0948e3212b68
+
 - **Pure Go.** One binary, [tree-sitter](https://tree-sitter.github.io)
   grammars included, with no cgo, browser, server, or Node.
 - **Live agent loop.** Comments land in your agent's session as you send

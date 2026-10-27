@@ -31,6 +31,7 @@ type File struct {
 	Path, OldPath    string
 	Status           byte // M A D R C
 	Binary           bool
+	Pseudo           bool // a commit message, not a working-copy file
 	Note             string
 	OldBlob, NewBlob string
 	Hash             string

@@ -36,6 +36,13 @@ diff side by side when its pane is 150 columns or wider.
 
 Press `?` in nit for the keyboard shortcuts.
 
+### Commit messages
+
+With `-r` or `-f`/`-t`, each reviewed commit's description leads the diff as
+an added file, `.review/COMMIT_MSG` (or `.review/COMMIT_MSG.<id>` per commit
+when there are several), so prose gets comments like code. A real
+`.review/COMMIT_MSG` in the working copy takes its place.
+
 ## Platforms
 
 nit runs on Linux and macOS.

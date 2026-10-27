@@ -225,6 +225,7 @@ func (a *App) applyDiff(d *review.Snapshot, err error) {
 	for _, f := range files {
 		f.Hash = d.FileHashes[f.Path]
 		f.init(d.Syntaxes[f.Path])
+		f.Pseudo = d.Pseudo[f.Path]
 		_, f.Viewed = d.Viewed[f.Path]
 		f.Collapsed = f.Viewed
 		if o := a.byPath[f.Path]; o != nil {
@@ -802,6 +803,8 @@ func (a *App) submit(send bool) {
 		then = func() {
 			f.Sent = append(f.Sent, &Card{Kind: CardSent, File: f, Side: c.Side, Line: c.Line, From: c.From, To: c.To, Body: text, At: time.Now()})
 		}
+	case f.Pseudo:
+		c.Err = "The commit message isn't a file to comment in, use Send"
 	case !a.repo.CommentsEnabled():
 		c.Err = "Inline comments need the diff to end at the working copy"
 	case c.Side == 0:

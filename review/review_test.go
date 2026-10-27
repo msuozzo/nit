@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -359,5 +360,70 @@ func TestGit(t *testing.T) {
 	}
 	if _, _, err := (&Repo{}).Contents("x", ""); err == nil {
 		t.Error("Contents without endpoints succeeded")
+	}
+}
+
+func TestMessages(t *testing.T) {
+	jj := t.TempDir()
+	if _, err := exec.LookPath("jj"); err == nil {
+		sh(t, jj, `jj git init . && printf 'a\n' > a.go && jj commit -m 'first change' &&
+			printf 'b\n' > a.go && jj describe -m 'second change
+
+with a body'`)
+	}
+	git := t.TempDir()
+	sh(t, git, `git init -q -b main . && printf 'a\n' > a.go && git add a.go && git -c user.email=t@t -c user.name=t commit -q -m one &&
+		printf 'b\n' > a.go && git -c user.email=t@t -c user.name=t commit -q -am 'two
+
+with a body'`)
+	for _, tc := range []struct {
+		name, dir string
+		o         Options
+		want      []string // first lines of the messages shown
+		single    bool     // shown as the one MessagePath
+	}{
+		{"jj one", jj, Options{Revisions: "@"}, []string{"second change"}, true},
+		{"jj parent", jj, Options{Revisions: "@-"}, []string{"first change"}, true},
+		{"jj range", jj, Options{From: "root()"}, []string{"first change", "second change"}, false},
+		{"jj default diff", jj, Options{}, nil, false},
+		{"git from", git, Options{Git: true, From: "HEAD~1"}, []string{"two"}, true},
+		{"git range", git, Options{Git: true, Revisions: "HEAD~1..HEAD"}, []string{"two"}, true},
+		{"git empty range", git, Options{Git: true, Revisions: "HEAD"}, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := exec.LookPath("jj"); err != nil && tc.dir == jj {
+				t.Skip("no jj")
+			}
+			r, err := Open(tc.dir, tc.o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s, err := r.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for name := range s.Pseudo {
+				if _, ok := s.FileHashes[name]; !ok || !strings.HasPrefix(name, MessagePath) || (name == MessagePath) != tc.single {
+					t.Errorf("pseudo-file %q (single %v, hashed %v)", name, tc.single, ok)
+				}
+				_, text, _ := r.Contents(name, "")
+				got = append(got, strings.SplitN(*text, "\n", 2)[0])
+			}
+			slices.Sort(got)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("messages = %q, want %q", got, tc.want)
+			}
+			if tc.single && !strings.HasPrefix(s.Patch, "diff --git a/"+MessagePath+" b/"+MessagePath+"\nnew file mode 100644\n--- /dev/null\n+++ b/"+MessagePath+"\n@@ -0,0 +1,") {
+				t.Errorf("patch does not lead with the message:\n%s", s.Patch)
+			}
+		})
+	}
+	// A message file in the working copy, as the review skill writes, wins.
+	sh(t, git, `mkdir .review && printf 'draft\n' > .review/COMMIT_MSG && git add .review`)
+	r, _ := Open(git, Options{Git: true, From: "HEAD~1"})
+	s, _ := r.Load()
+	if len(s.Pseudo) != 0 || strings.Count(s.Patch, "b/"+MessagePath+"\n") != 2 || !strings.Contains(s.Patch, "+draft") {
+		t.Errorf("real message file: pseudo %v, patch:\n%s", s.Pseudo, s.Patch)
 	}
 }

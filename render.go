@@ -719,7 +719,7 @@ func (a *App) drawCompose(c *Card, sub, y, tx, tx1 int, bg tcell.Color) {
 			x = a.button(x, y, tx1, " ⌃⏎ Send ", th.st(th.Bg, th.Accent).Bold(true), th.st(th.Bg, th.Fg).Bold(true), func(int) { a.submit(true) }) + 1
 		}
 		inline := th.st(th.Fg, th.Raised)
-		if !a.repo.CommentsEnabled() || c.Side == 0 {
+		if !a.repo.CommentsEnabled() || c.Side == 0 || c.File.Pseudo {
 			inline = th.st(th.Subtle, th.Raised)
 		}
 		x = a.button(x, y, tx1, " ⌃⌥⏎ Comment in file ", inline, th.st(th.Bg, th.Fg), func(int) { a.submit(false) }) + 1

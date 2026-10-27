@@ -11,10 +11,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -41,8 +43,11 @@ type Repo struct {
 	left    string // old endpoint
 	right   string // new endpoint, "" for the working copy
 	inline  bool   // the diff ends at the working copy
+	revs    string // commits whose descriptions are reviewed, "" for none
 	send    string
 
+	msgMu    sync.Mutex
+	msgs     map[string]string // message pseudo-files from the last Load
 	viewedMu sync.Mutex
 	sendMu   sync.Mutex
 }
@@ -71,7 +76,7 @@ func Open(dir string, o Options) (*Repo, error) {
 
 func (r *Repo) jjDiff(o Options) {
 	if rev := o.Revisions; rev != "" && o.From == "" && o.To == "" {
-		r.args = []string{"-r", rev}
+		r.args, r.revs = []string{"-r", rev}, rev
 		r.inline = rev == "@" || strings.HasSuffix(rev, "..@")
 		if a, b, ok := splitRange(rev); ok {
 			r.ends, r.left, r.right = true, a, b
@@ -91,6 +96,9 @@ func (r *Repo) jjDiff(o Options) {
 		}
 		r.inline = o.To == "" || o.To == "@"
 		r.ends, r.left, r.right = true, cmp.Or(from, "@"), o.To
+		if o.From != "" {
+			r.revs = "(" + o.From + ")..(" + cmp.Or(o.To, "@") + ")"
+		}
 	}
 	if r.right == "@" {
 		r.right = ""
@@ -101,15 +109,15 @@ func (r *Repo) gitDiff(o Options) error {
 	switch rev := o.Revisions; {
 	case o.To != "":
 		from := cmp.Or(o.From, "HEAD")
-		r.args, r.ends, r.left, r.right = []string{from, o.To}, true, from, o.To
+		r.args, r.ends, r.left, r.right, r.revs = []string{from, o.To}, true, from, o.To, from+".."+o.To
 	case o.From != "":
-		r.args, r.ends, r.left, r.inline = []string{o.From}, true, o.From, true
+		r.args, r.ends, r.left, r.inline, r.revs = []string{o.From}, true, o.From, true, o.From+"..HEAD"
 	case rev != "":
 		r.args, r.inline = []string{rev}, !strings.Contains(rev, "..")
 		if a, b, ok := splitRange(rev); ok {
-			r.ends, r.left, r.right = true, a, b
+			r.ends, r.left, r.right, r.revs = true, a, b, rev
 		} else if r.inline {
-			r.ends, r.left = true, rev
+			r.ends, r.left, r.revs = true, rev, rev+"..HEAD"
 		}
 	default:
 		for _, base := range []string{"origin/HEAD", "origin/main", "origin/master", "main", "master"} {
@@ -167,8 +175,14 @@ func shellQuote(s string) string {
 }
 
 // Diff runs the diff and returns the patch in git format, with a/ and b/
-// path prefixes whatever the user's config says.
+// path prefixes whatever the user's config says. The descriptions of the
+// commits under review lead it as added files, see messages.
 func (r *Repo) Diff() (string, error) {
+	patch, _, err := r.diff()
+	return patch, err
+}
+
+func (r *Repo) diff() (patch string, msgs map[string]string, err error) {
 	var args []string
 	if r.VCS == "jj" {
 		args = append([]string{"--color=never", "--no-pager", "--config", "diff.git.show-path-prefix=true", "diff", "--git"}, r.args...)
@@ -182,9 +196,62 @@ func (r *Repo) Diff() (string, error) {
 	}
 	out, err := run(r.dir, r.VCS, args...)
 	if err != nil {
-		return "", fmt.Errorf("%s diff: %w", r.VCS, err)
+		return "", nil, fmt.Errorf("%s diff: %w", r.VCS, err)
 	}
-	return string(out), nil
+	patch = string(out)
+	msgs = r.messages()
+	var head strings.Builder
+	for _, name := range slices.Sorted(maps.Keys(msgs)) {
+		if strings.Contains("\n"+patch, "\ndiff --git a/"+name+" b/"+name+"\n") {
+			delete(msgs, name) // the working copy has a real one
+			continue
+		}
+		lines := strings.Split(strings.TrimRight(msgs[name], "\n"), "\n")
+		fmt.Fprintf(&head, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", name, name, name, len(lines))
+		for _, l := range lines {
+			head.WriteString("+" + l + "\n")
+		}
+	}
+	return head.String() + patch, msgs, nil
+}
+
+// MessagePath is the pseudo-file a reviewed commit's description shows as,
+// with a .<id> suffix per commit when there are several.
+const MessagePath = ".review/COMMIT_MSG"
+
+// messages reads the descriptions of the commits under review, keyed by
+// pseudo-file path. Commits without a description are skipped.
+func (r *Repo) messages() map[string]string {
+	if r.revs == "" {
+		return nil
+	}
+	var out []byte
+	var err error
+	if r.VCS == "jj" {
+		out, err = run(r.Root, "jj", "--ignore-working-copy", "--color=never", "--no-pager", "log", "--no-graph",
+			"-r", r.revs, "-T", `change_id.short(8) ++ "\0" ++ description ++ "\0"`)
+	} else {
+		out, err = run(r.Root, "git", "log", "--format=%h%x00%B%x00", r.revs)
+	}
+	if err != nil {
+		return nil
+	}
+	var ids, texts []string
+	f := strings.Split(string(out), "\x00")
+	for i := 0; i+1 < len(f); i += 2 {
+		if strings.TrimSpace(f[i+1]) != "" {
+			ids, texts = append(ids, strings.TrimSpace(f[i])), append(texts, f[i+1])
+		}
+	}
+	msgs := map[string]string{}
+	for i, id := range ids {
+		if len(ids) == 1 {
+			msgs[MessagePath] = texts[i]
+		} else {
+			msgs[MessagePath+"."+id] = texts[i]
+		}
+	}
+	return msgs
 }
 
 // Snapshot is one run of the diff with the state shown alongside it.
@@ -194,14 +261,21 @@ type Snapshot struct {
 	FileHashes map[string]string // file → content hash, the viewed-state key
 	Viewed     map[string]string // viewed files → their hash
 	Syntaxes   map[string]*Syntax
+	Pseudo     map[string]bool // message pseudo-files, not in the working copy
 }
 
 func (r *Repo) Load() (*Snapshot, error) {
-	patch, err := r.Diff()
+	patch, msgs, err := r.diff()
 	if err != nil {
 		return nil, err
 	}
-	s := &Snapshot{Patch: patch, PatchHash: hashOf(patch), FileHashes: FileHashes(patch), Syntaxes: map[string]*Syntax{}}
+	r.msgMu.Lock()
+	r.msgs = msgs
+	r.msgMu.Unlock()
+	s := &Snapshot{Patch: patch, PatchHash: hashOf(patch), FileHashes: FileHashes(patch), Syntaxes: map[string]*Syntax{}, Pseudo: map[string]bool{}}
+	for name := range msgs {
+		s.Pseudo[name] = true
+	}
 	s.Viewed = r.viewed(s.FileHashes)
 	for f := range s.FileHashes {
 		s.Syntaxes[f] = r.syntax(f)
@@ -257,6 +331,12 @@ func FileHashes(patch string) map[string]string {
 // Contents returns a file at both endpoints of the diff. A side is nil where
 // the file doesn't exist.
 func (r *Repo) Contents(path, oldPath string) (old, new *string, err error) {
+	r.msgMu.Lock()
+	msg, ok := r.msgs[path]
+	r.msgMu.Unlock()
+	if ok {
+		return nil, &msg, nil
+	}
 	if !r.ends {
 		return nil, nil, errors.New("this diff has no two endpoints to expand from")
 	}

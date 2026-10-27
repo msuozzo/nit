@@ -5,7 +5,8 @@ rm -rf /tmp/nit-demo && mkdir -p /tmp/nit-demo/home /tmp/nit-demo/repo
 (cd "$demo/.." && go build -trimpath -o /tmp/nit-demo/bin/nit .) || return
 export PATH="/tmp/nit-demo/bin:$PATH" HOME=/tmp/nit-demo/home
 export JJ_USER=Demo JJ_EMAIL=demo@example.com NIT_SEND="$demo/agent.sh"
-cd /tmp/nit-demo/repo && jj git init --quiet
+cd /tmp/nit-demo/repo && jj git init --quiet --no-colocate
+printf 'module example.com/stats\n\ngo 1.22\n' > go.mod
 cat > stats.go <<'GO'
 package stats
 

@@ -30,6 +30,7 @@ func TestPrompt(t *testing.T) {
 			"Review comment on src/a.ts, line 7 (old side of `jj diff -r @-`), in lines 5–9 and line 12:\n\n" +
 				"````\na ```b```\n````\n\n```\nc\n```\n\nwhy two?"},
 		{"additions", [2]int{1, 2}, nil, "Review comment on src/a.ts, lines 1–2 (new side of `jj diff -r @-`):\n\nwhy two?"},
+		{"deletions", [2]int{0, 0}, nil, "Review comment on src/a.ts, whole file (`jj diff -r @-`):\n\nwhy two?"},
 	} {
 		p := payload{File: "src/a.ts", Side: tc.side, Lines: tc.lines, Code: tc.code, Text: "why two?"}
 		p.Diff.Command = "jj diff -r @-"

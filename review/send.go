@@ -97,6 +97,9 @@ func (r *Repo) Send(c Comment) error {
 //	```
 //
 //	why two?
+//
+// A file comment has lines 0–0 and reads "Review comment on a.go, whole
+// file (`jj diff -r @-`):" with no excerpt.
 func prompt(p payload) string {
 	span := func(l [2]int) string {
 		if l[0] == l[1] {
@@ -109,6 +112,9 @@ func prompt(p payload) string {
 		side = "old side"
 	}
 	head := fmt.Sprintf("Review comment on %s, %s (%s of `%s`)", p.File, span(p.Lines), side, p.Diff.Command)
+	if p.Lines[1] == 0 {
+		head = fmt.Sprintf("Review comment on %s, whole file (`%s`)", p.File, p.Diff.Command)
+	}
 	if len(p.Code) == 0 {
 		return head + ":\n\n" + p.Text
 	}

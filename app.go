@@ -760,6 +760,8 @@ func (a *App) selRange(side int) (f *File, from, to int, ok bool) {
 func (a *App) commentSide() int {
 	r := &a.lay.Rows[a.cur]
 	switch {
+	case r.Kind == RowFile:
+		return b2i(r.F.Status != 'D')
 	case a.lay.Split && r.lineOn(a.side, true) != nil:
 		return a.side
 	case a.lay.Split:
@@ -773,20 +775,32 @@ func (a *App) commentSide() int {
 	return 1
 }
 
+// openCompose opens a compose box on the selected lines, or on the whole
+// file from its header. A file comment has line 0 and can only be sent.
 func (a *App) openCompose(side int) {
-	if a.lay == nil || a.lay.Rows[a.cur].Kind != RowLine {
+	if a.lay == nil {
 		return
 	}
-	if !a.repo.CanSend() && !a.repo.CommentsEnabled() {
+	var c *Card
+	switch r := &a.lay.Rows[a.cur]; {
+	case r.Kind == RowFile && !a.repo.CanSend():
+		a.flash("file comments need a --send command", a.th.Amber)
+		return
+	case r.Kind == RowFile:
+		c = &Card{Kind: CardCompose, File: r.F, Side: side}
+	case r.Kind != RowLine:
+		return
+	case !a.repo.CanSend() && !a.repo.CommentsEnabled():
 		a.flash("comments are off: the diff doesn't end at the working copy and nit has no --send", a.th.Amber)
 		return
-	}
-	f, from, to, ok := a.selRange(side)
-	if !ok {
-		return
+	default:
+		f, from, to, ok := a.selRange(side)
+		if !ok {
+			return
+		}
+		c = &Card{Kind: CardCompose, File: f, Side: side, Line: to, From: from, To: to}
 	}
 	a.stashDraft()
-	c := &Card{Kind: CardCompose, File: f, Side: side, Line: to, From: from, To: to}
 	c.Ed = newEditor(a.drafts[c.draftKey()])
 	c.Ed.row = len(c.Ed.lines) - 1
 	c.Ed.col = len(c.Ed.lines[c.Ed.row])
@@ -858,7 +872,10 @@ func (a *App) submit(send bool) {
 	case send && !a.repo.CanSend():
 		c.Err = "no --send command (pass --send or set SKEPSIS_SEND)"
 	case send:
-		req := review.Comment{File: f.Path, Side: sideName(c.Side), Lines: [2]int{c.From, c.To}, Text: text, Code: f.excerpt(c.Side, c.From, c.To)}
+		req := review.Comment{File: f.Path, Side: sideName(c.Side), Lines: [2]int{c.From, c.To}, Text: text}
+		if c.To > 0 {
+			req.Code = f.excerpt(c.Side, c.From, c.To)
+		}
 		if req.Blob = [2]string{f.OldBlob, f.NewBlob}[c.Side]; strings.Trim(req.Blob, "0") == "" {
 			req.Blob = ""
 		}
@@ -867,6 +884,8 @@ func (a *App) submit(send bool) {
 		then = func() {
 			f.Sent = append(f.Sent, &Card{Kind: CardSent, File: f, Side: c.Side, Line: c.Line, From: c.From, To: c.To, Body: text, At: time.Now()})
 		}
+	case c.To == 0:
+		c.Err = "A comment on the whole file can only be sent"
 	case f.Pseudo:
 		c.Err = "The commit message isn't a file to comment in, use Send"
 	case !a.repo.CommentsEnabled():

@@ -78,7 +78,11 @@ func TestBuildLayout(t *testing.T) {
 	if got := rowStrs(buildLayout([]*File{f}, false, 160, nil)); !reflect.DeepEqual(got, []string{"file"}) {
 		t.Errorf("collapsed rows %q", got)
 	}
-	f.Collapsed = false
+	f.Sent = []*Card{card(1, 0, "lgtm")}
+	if got := rowStrs(buildLayout([]*File{f}, false, 160, nil)); !reflect.DeepEqual(got, []string{"file", "card:lgtm:0", "card:lgtm:1"}) {
+		t.Errorf("collapsed rows with a file comment %q", got)
+	}
+	f.Sent, f.Collapsed = nil, false
 	compose := &Card{Kind: CardCompose, File: f, Side: 1, Line: 3, Ed: newEditor("")}
 	if got := rowStrs(buildLayout([]*File{f}, false, 160, compose)); !reflect.DeepEqual(got, []string{"file", "a", "b", "c", "B", "d", "card::0", "card::1", "card::2", "card::3"}) {
 		t.Errorf("compose rows %q", got)

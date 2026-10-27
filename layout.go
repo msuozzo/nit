@@ -69,9 +69,6 @@ func buildLayout(files []*File, split bool, w int, compose *Card) *Layout {
 		f.fitNumbers()
 		lay.fileAt[f] = len(lay.Rows)
 		lay.add(Row{Kind: RowFile, F: f})
-		if f.Collapsed {
-			continue
-		}
 		cards := slices.Concat(f.Reviews, f.Sent)
 		if compose != nil && compose.File == f {
 			cards = append(cards, compose)
@@ -89,8 +86,13 @@ func buildLayout(files []*File, split bool, w int, compose *Card) *Layout {
 				}
 			}
 		}
+		// Cards above the first line, file comments among them, hang off the
+		// header and so show while the file is collapsed.
 		emit(0, 0)
 		emit(1, 0)
+		if f.Collapsed {
+			continue
+		}
 		switch {
 		case f.Binary:
 			lay.add(Row{Kind: RowNote, F: f, Note: "Binary file not shown"})

@@ -5,16 +5,42 @@ agent. It's heavily inspired by, and compatible with,
 [skepsis](https://github.com/oxidecomputer/skepsis), Oxide Computer's
 browser-based review tool.
 
-https://github.com/user-attachments/assets/42d8de92-03fd-4176-bdd7-d91f56be24ef
+https://github.com/user-attachments/assets/295c3933-41a3-4932-a837-0948e3212b68
 
 - **Pure Go.** One binary, [tree-sitter](https://tree-sitter.github.io)
   grammars included, with no cgo, browser, server, or Node.
-- **Live agent loop.** Comments land in your agent's session as you send
-  them, with diffs updated as they change.
+- **Live agent loop.** Your agent opens nit in a split of its own terminal,
+  and comments land in its session as you send them, with diffs updated as it
+  edits.
 - **Full-featured diffs.** Split or unified, with syntax highlighting,
   word-level changes, and a file tree.
 - **Keyboard-first, mouse-friendly.** Navigation, search, and commenting all
   have familiar keybindings, but a click, scroll, or drag works just as well.
+
+## Review beside your agent
+
+Ask your agent to review a change, and it splits its own
+[tmux](https://github.com/tmux/tmux) pane, or
+[Ghostty](https://ghostty.org) window on macOS, and opens nit alongside your
+session. It acts on each comment you send, its edits show up in nit as it
+makes them, and approving the changes closes the split.
+
+https://github.com/user-attachments/assets/42d8de92-03fd-4176-bdd7-d91f56be24ef
+
+`skills/nit` is an [Agent Skills](https://agentskills.io) skill. Link it
+where your agent finds skills:
+
+```
+ln -s "$PWD/skills/nit" ~/.agents/skills/nit   # the shared location many agents read
+ln -s "$PWD/skills/nit" ~/.claude/skills/nit   # Claude Code
+```
+
+Then ask your agent to review a change in nit. Outside tmux and Ghostty, it
+prints the nit command to run in another terminal.
+
+For most coding agents, you can configure `NIT_SEND` to deliver comments to
+the agent's session. For Claude Code, no setup is needed as the skill
+delivers comments through its messaging socket.
 
 ## Run
 
@@ -50,9 +76,9 @@ when there are several), so prose gets comments like code. A real
 
 Send delivers a comment straight to your coding agent, quoting the code it's
 on, so the agent can act on it while you keep reviewing. The [agent
-skill](#agent-skill) sets this up for agents like Claude Code. Send also
-works where in-file comments can't: on removed lines, and on diffs that don't
-end at the working copy.
+skill](#review-beside-your-agent) sets this up for agents like Claude Code.
+Send also works where in-file comments can't: on removed lines, and on diffs
+that don't end at the working copy.
 
 Send runs `--send CMD`, or `NIT_SEND` from the environment, with `sh -c` for
 each comment. The command gets `NIT_ROOT` set to the repository root, and the
@@ -72,29 +98,9 @@ diff, with keys named after the diff flags.
 `{"op": "check"}` looks for changes on disk right away, and `{"op": "quit"}`
 exits.
 
-## Agent skill
-
-`skills/nit` is an [Agent Skills](https://agentskills.io) skill that opens
-nit beside your coding agent and acts on the comments you send from it. Link
-it where your agent finds skills:
-
-```
-ln -s "$PWD/skills/nit" ~/.agents/skills/nit   # the shared location many agents read
-ln -s "$PWD/skills/nit" ~/.claude/skills/nit   # Claude Code
-```
-
-Then ask your agent to review a change in nit. Outside tmux and Ghostty, it
-prints the nit command to run in another terminal.
-
-For most coding agents, you can configure `NIT_SEND` to deliver comments to
-the agent's session. For Claude Code, no setup is needed as the skill
-delivers comments through its undocumented messaging socket, so treat it as
-experimental.
-
 ## Platforms
 
-nit runs on Linux and macOS. The included agent skill knows how to control
-tmux and Ghostty (macOS only) to open nit next to your agent automatically.
+nit runs on Linux and macOS.
 
 ## Compatibility
 

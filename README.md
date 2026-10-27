@@ -57,9 +57,29 @@ an added file, `.review/COMMIT_MSG` (or `.review/COMMIT_MSG.<id>` per commit
 when there are several), so prose gets comments like code. A real
 `.review/COMMIT_MSG` in the working copy takes its place.
 
+## Agent skill
+
+`skills/nit` is an [Agent Skills](https://agentskills.io) skill that opens
+nit beside your coding agent and acts on the comments you send from it. Link
+it where your agent finds skills:
+
+```
+ln -s "$PWD/skills/nit" ~/.agents/skills/nit   # the shared location many agents read
+ln -s "$PWD/skills/nit" ~/.claude/skills/nit   # Claude Code
+```
+
+Then ask your agent to review a change in nit. Outside tmux and Ghostty, it
+prints the nit command to run in another terminal.
+
+For most coding agents, you can configure `NIT_SEND` to deliver comments to
+the agent's session. For Claude Code, no setup is needed as the skill
+delivers comments through its undocumented messaging socket, so treat it as
+experimental.
+
 ## Platforms
 
-nit runs on Linux and macOS.
+nit runs on Linux and macOS. The included agent skill knows how to control
+tmux and Ghostty (macOS only) to open nit next to your agent automatically.
 
 ## Compatibility
 

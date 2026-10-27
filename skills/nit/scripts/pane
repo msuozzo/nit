@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Runs one nit pane beside a coding agent's session and steers it.
+
+  pane open [nit diff flags] [paths]  show a diff, opening the pane the first time
+  pane check                          have nit look for changes on disk now
+  pane quit                           exit nit, which closes its pane
+  pane send SOCKET                    nit's --send command for Claude Code's messaging socket
+
+open splits this session's pane in tmux, or the focused terminal in Ghostty on
+macOS. Elsewhere it prints the nit command to run in another terminal. Send
+goes to $NIT_SEND when the user set one for their agent, else to Claude Code's
+messaging socket, else nowhere, and comments land in files as <review> blocks.
+"""
+import hashlib
+import json
+import os
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+
+# The user's own Send command, as nit itself reads it.
+SEND = os.environ.get('NIT_SEND') or os.environ.get('SKEPSIS_SEND')
+# Claude Code sets this in the commands it runs. Writing a user message to it is
+# undocumented, so Send may break with a Claude Code update.
+SESSION = os.environ.get('CLAUDE_CODE_MESSAGING_SOCKET')
+
+# nit's control socket: one pane per Claude Code session, or per directory.
+CTL = os.path.join(tempfile.gettempdir(), 'nit-%d' % os.getuid(),
+                   hashlib.sha256((SESSION or os.getcwd()).encode()).hexdigest()[:12] + '.sock')
+# Ghostty keeps a split open after its command exits, so quit closes it by id.
+GHOSTTY_ID = CTL + '.ghostty'
+
+GHOSTTY = '''on run argv
+	tell application "Ghostty"
+		set cfg to new surface configuration
+		set command of cfg to item 1 of argv
+		set initial working directory of cfg to item 2 of argv
+		set environment variables of cfg to {"PATH=" & item 3 of argv}
+		return id of (split (focused terminal of selected tab of front window) direction right with configuration cfg)
+	end tell
+end run'''
+
+
+def close_ghostty():
+    try:
+        with open(GHOSTTY_ID) as f:
+            term = f.read().strip()
+    except OSError:
+        return
+    os.remove(GHOSTTY_ID)
+    subprocess.run(['osascript', '-e', 'tell application "Ghostty" to close terminal id "%s"' % term],
+                   capture_output=True)
+
+
+def control(**cmd):
+    """Sends one command to the running nit and returns its reply, or None if none runs."""
+    with socket.socket(socket.AF_UNIX) as s:
+        try:
+            s.connect(CTL)
+        except OSError:
+            return None
+        s.sendall(json.dumps(cmd).encode() + b'\n')
+        return s.makefile().readline().strip()
+
+
+def options(args):
+    """Turns nit's diff flags and paths into the fields of an open command."""
+    names = {'r': 'revisions', 'revisions': 'revisions', 'f': 'from', 'from': 'from', 't': 'to', 'to': 'to'}
+    opts, paths, rest = {}, [], iter(args)
+    for a in rest:
+        if a == '--':
+            paths += rest
+            break
+        name, eq, value = a.lstrip('-').partition('=')
+        if not a.startswith('-'):
+            paths.append(a)
+        elif name in names:
+            opts[names[name]] = value if eq else next(rest, None) or sys.exit('pane: %s needs a value' % a)
+        elif name == 'git':
+            opts['git'] = True
+        else:
+            sys.exit('pane: open takes nit diff flags and paths, not %s' % a)
+    if paths:
+        opts['paths'] = paths
+    return opts
+
+
+def cmd_open(*args):
+    reply = control(op='open', dir=os.getcwd(), **options(args))
+    if reply == 'ok':
+        print('the nit pane now shows the new diff')
+        return
+    if reply is not None:
+        sys.exit('nit: ' + reply)
+    close_ghostty()
+    nit = shutil.which('nit') or sys.exit('nit is not on PATH')
+    os.makedirs(os.path.dirname(CTL), mode=0o700, exist_ok=True)
+    argv = [nit, '--listen', CTL]
+    if SEND:
+        argv += ['--send', SEND]
+    elif SESSION:
+        argv += ['--send', shlex.join([sys.executable, os.path.abspath(__file__), 'send', SESSION])]
+    cmd, cwd = shlex.join(argv + list(args)), os.getcwd()
+    try:
+        if os.environ.get('TMUX'):
+            target = ['-t', os.environ['TMUX_PANE']] if os.environ.get('TMUX_PANE') else []
+            subprocess.run(['tmux', 'split-window', '-h', *target, '-c', cwd, '-e', 'PATH=' + os.environ['PATH'], cmd],
+                           check=True, capture_output=True, text=True)
+        elif os.environ.get('TERM_PROGRAM') == 'ghostty' and sys.platform == 'darwin':
+            term = subprocess.run(['osascript', '-', cmd, cwd, os.environ['PATH']], input=GHOSTTY, text=True,
+                                  check=True, capture_output=True).stdout.strip()
+            with open(GHOSTTY_ID, 'w') as f:
+                f.write(term)
+        else:
+            print('run this in another terminal in %s:\n%s' % (cwd, cmd))
+            return
+    except subprocess.CalledProcessError as e:
+        sys.exit('could not split the terminal: %s\nrun this in another terminal in %s:\n%s' % (e.stderr.strip(), cwd, cmd))
+    for _ in range(50):
+        time.sleep(0.1)
+        if control(op='check') is not None:
+            print('opened a nit pane')
+            return
+    sys.exit('nit did not start, so run it by hand to see why:\n' + cmd)
+
+
+def cmd_check():
+    print(control(op='check') or 'no nit pane')
+
+
+def cmd_quit():
+    print(control(op='quit') or 'no nit pane')
+    for _ in range(20):  # nit removes its socket as it exits
+        if not os.path.exists(CTL):
+            break
+        time.sleep(0.1)
+    close_ghostty()
+
+
+def cmd_send(session):
+    req = json.load(sys.stdin)
+    msg = {'type': 'user', 'message': {'role': 'user', 'content': req['prompt']}}
+    with socket.socket(socket.AF_UNIX) as s:
+        try:
+            s.connect(session)
+        except OSError as e:
+            sys.exit('Claude Code session %s: %s' % (session, e))
+        s.sendall(json.dumps(msg).encode() + b'\n')
+
+
+if __name__ == '__main__':
+    cmds = {'open': cmd_open, 'check': cmd_check, 'quit': cmd_quit, 'send': cmd_send}
+    if len(sys.argv) < 2 or sys.argv[1] not in cmds:
+        sys.exit(__doc__)
+    cmds[sys.argv[1]](*sys.argv[2:])

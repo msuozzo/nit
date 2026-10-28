@@ -12,13 +12,13 @@ screen as it's typed.
 """
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 DEMO = Path(__file__).parent
-W, H, SS = 1920, 1080, 2  # pi.tape's size, and supersampling for smooth edges
+W, H, SS = 1280, 720, 2  # pi.tape's size, and supersampling for smooth edges
+NIT = 0.6  # the share of the width nit's pane takes, as pi-setup.sh's tmux.conf sets
 TYPING = 0.060  # pi.tape's TypingSpeed
 HOLD, FADE_IN, FADE_OUT = 1.2, 0.10, 0.20
 
@@ -27,39 +27,47 @@ MONO = "/System/Library/Fonts/SFNSMono.ttf"
 
 
 def record():
-    """Runs pi.tape, returning each line VHS prints as (seconds, line)."""
+    """Runs pi.tape, returning each line VHS prints as (frames so far, line).
+
+    VHS captures fewer frames than it plays back when it can't keep up, so the
+    video runs shorter than the recording did. A command's place in the video
+    is the frames captured before it, counted where VHS keeps them.
+    """
+    tmp = Path(tempfile.gettempdir())
+    old = set(tmp.glob("vhs*"))
     lines = []
     with subprocess.Popen(["vhs", str(DEMO / "pi.tape")], stdout=subprocess.PIPE, text=True) as vhs:
         for line in vhs.stdout:
             print(line, end="")
-            lines.append((time.time(), line.strip()))
+            frames = sum(1 for d in set(tmp.glob("vhs*")) - old for _ in d.glob("frame-text-*.png"))
+            lines.append((frames, line.strip()))
     if vhs.returncode:
         raise SystemExit(vhs.returncode)
     return lines
 
 
-def commands(lines):
+def commands(lines, dur):
     """Returns the tape's commands between Show and Hide, as (video time, command)."""
     show, out = None, []
-    for t, cmd in lines:
+    for n, cmd in lines:
         if show is None:
-            show = t if cmd == "Show" else None
+            show = n if cmd == "Show" else None
         elif cmd == "Hide":
-            break
+            return [(dur * (m - show) / (n - show), c) for m, c in out]
         else:
-            out.append((t - show, cmd))
-    return out
+            out.append((n, cmd))
+    raise SystemExit("no Show and Hide in pi.tape's output")
 
 
 def groups(cmds):
     """Turns commands into keys to draw: (caption, center x, [(time, keys so far)]).
 
-    Keys go to pi until nit opens in the right half, and to nit until it closes.
+    Keys go to pi until nit opens in its pane on the right, and to nit until it closes.
     """
     out, mode, nit, search = [], "prompt", False, None
     for t, cmd in cmds:
         name, _, arg = cmd.partition(" ")
-        cx = W * 3 // 4 if nit else W // 2
+        cx = W - int(W * NIT) // 2 if nit else W // 2
         if name == "Wait" and arg == "Screen NORMAL":
             nit = True
         elif name == "Wait" and "{100}" in arg:
@@ -79,6 +87,8 @@ def groups(cmds):
             mode = "compose"
         elif name == "Type" and mode == "nit" and arg == "r":
             out.append(("reload", cx, [(t, [("key", "r")])]))
+        elif name == "Ctrl" and arg == "D" and mode == "nit":
+            out.append(("scroll down", cx, [(t, [("key", "⌃"), ("key", "D")])]))
         elif name == "Type" and mode == "nit" and arg == "gg":
             out.append(("to the top", cx, [(t, [("key", "g")]), (t + TYPING, [("key", "g"), ("key", "g")])]))
         elif name == "Ctrl" and arg == "S" and mode == "compose":
@@ -106,41 +116,41 @@ def card(keys, caption, cx):
     """Draws keys as chips in nit's dark colors, then what they do, low and centered on cx."""
     ov = Image.new("RGBA", (W * SS, H * SS), (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
-    fk, fc = font(MONO, 32, 600), font(SF, 30, 500)
-    chip_h, pad, gap = 52 * SS, 18 * SS, 8 * SS
-    parts = [(kind, s, max(50 * SS, bbox(d, s, fk)[0] + 26 * SS) if kind == "key" else bbox(d, s, fk)[0])
+    fk, fc = font(MONO, 21, 600), font(SF, 20, 500)
+    chip_h, pad, gap = 35 * SS, 12 * SS, 5 * SS
+    parts = [(kind, s, max(33 * SS, bbox(d, s, fk)[0] + 17 * SS) if kind == "key" else bbox(d, s, fk)[0])
              for kind, s in keys]
     cw, ch, cl, ct = bbox(d, caption, fc)
-    w = sum(pw for _, _, pw in parts) + gap * (len(parts) - 1) + 20 * SS + cw + 2 * pad
-    h = chip_h + 2 * 14 * SS
-    x0, y1 = cx * SS - w // 2, (H - 70) * SS
+    w = sum(pw for _, _, pw in parts) + gap * (len(parts) - 1) + 13 * SS + cw + 2 * pad
+    h = chip_h + 2 * 9 * SS
+    x0, y1 = cx * SS - w // 2, (H - 47) * SS
     y0 = y1 - h
-    d.rounded_rectangle((x0, y0, x0 + w, y1), radius=14 * SS, fill=rgba("#161b22", 240), outline=rgba("#30363d"),
+    d.rounded_rectangle((x0, y0, x0 + w, y1), radius=9 * SS, fill=rgba("#161b22", 240), outline=rgba("#30363d"),
                         width=2 * SS)
     x, cy = x0 + pad, y0 + h // 2
     for kind, s, pw in parts:
         tw, th, l, t = bbox(d, s, fk)
         if kind == "key":
-            d.rounded_rectangle((x, cy - chip_h // 2, x + pw, cy + chip_h // 2), radius=9 * SS,
+            d.rounded_rectangle((x, cy - chip_h // 2, x + pw, cy + chip_h // 2), radius=6 * SS,
                                 fill=rgba("#0d1117"), outline=rgba("#4493f8"), width=2 * SS)
             d.text((x + (pw - tw) // 2 - l, cy - th // 2 - t), s, font=fk, fill=rgba("#e6edf3"))
         else:
             d.text((x - l, cy - th // 2 - t), s, font=fk, fill=rgba("#e6edf3"))
         x += pw + gap
-    d.text((x + 20 * SS - gap - cl, cy - ch // 2 - ct), caption, font=fc, fill=rgba("#9198a1"))
+    d.text((x + 13 * SS - gap - cl, cy - ch // 2 - ct), caption, font=fc, fill=rgba("#9198a1"))
     # A soft shadow beneath, then all of it at the video's size.
     sh = Image.new("RGBA", ov.size, (0, 0, 0, 0))
     sh.putalpha(ov.getchannel("A").point(lambda v: v // 2))
-    sh = sh.transform(sh.size, Image.AFFINE, (1, 0, 0, 0, 1, -8 * SS)).filter(ImageFilter.GaussianBlur(16 * SS))
+    sh = sh.transform(sh.size, Image.AFFINE, (1, 0, 0, 0, 1, -5 * SS)).filter(ImageFilter.GaussianBlur(11 * SS))
     sh.alpha_composite(ov)
     return sh.resize((W, H), Image.LANCZOS)
 
 
 def draw(lines, video, out):
     """Draws each key group onto video as out, fading in and out, the next replacing the last."""
-    gs = groups(commands(lines))
     dur = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
                                    str(video)], text=True).strip()
+    gs = groups(commands(lines, float(dur)))
     tmp = Path(tempfile.mkdtemp())
     inputs, chain, prev = [], [], "0:v"
     for gi, (caption, cx, steps) in enumerate(gs):

@@ -25,7 +25,7 @@ Ask your agent to review a change, and it splits its own
 session. It acts on each comment you send, its edits show up in nit as it
 makes them, and approving the changes closes the split.
 
-https://github.com/user-attachments/assets/42d8de92-03fd-4176-bdd7-d91f56be24ef
+https://github.com/user-attachments/assets/cc81d577-d272-49da-8eae-5ace3bf2c96b
 
 `skills/nit` is an [Agent Skills](https://agentskills.io) skill. Link it
 where your agent finds skills:

@@ -13,9 +13,9 @@ Require pi
 Require tmux
 
 Set Shell "bash"
-Set FontSize 18
-Set Width 1920
-Set Height 1080
+Set FontSize 16
+Set Width 1280
+Set Height 720
 Set Padding 0
 Set TypingSpeed 60ms
 Set WaitTimeout 120s
@@ -41,10 +41,13 @@ Type "c" Sleep 600ms
 Type "can we add a Median?" Sleep 800ms
 Ctrl+S
 
-# pi adds Median, and nit lists what changed until r reloads.
+# pi adds Median, nit lists what changed until r reloads, and Ctrl+D scrolls
+# down to Median.
 Wait+Screen /diff changed/
 Sleep 1.5s
 Type "r"
+Sleep 1.2s
+Ctrl+D
 Sleep 2.5s
 
 # Approve the whole change from the commit message at the top, and pi closes

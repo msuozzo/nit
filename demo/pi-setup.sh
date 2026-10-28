@@ -10,6 +10,9 @@ export TMUX_TMPDIR=/tmp/nit-demo
 tmux kill-server 2>/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/setup.sh" || return
 unset NIT_SEND # pi-send.ts sets it inside pi
+# pi builds the package after its edit, so the packages it's likely to import
+# compile now, before recording, instead of slowing it.
+go build slices sort
 export PI_OFFLINE=1
 # Copies, not links, so pi shows no path outside the demo.
 mkdir -p ~/.agents/skills ~/.pi/agent/extensions
@@ -18,9 +21,8 @@ cp "$demo/pi-send.ts" "$demo/pi-demo.ts" ~/.pi/agent/extensions/
 cat > ~/.pi/agent/settings.json <<'JSON'
 {
   "defaultProvider": "google-vertex",
-  "defaultModel": "gemini-3.7-flash",
+  "defaultModel": "gemini-3.5-flash",
   "defaultThinkingLevel": "low",
-  "httpIdleTimeoutMs": 8000,
   "retry": { "baseDelayMs": 250 },
   "quietStartup": "header",
   "enableInstallTelemetry": false
@@ -36,8 +38,10 @@ set -g default-terminal tmux-256color
 set -ga terminal-overrides ',xterm-256color:Tc'
 set -g pane-border-style fg=colour238
 set -g pane-active-border-style fg=colour238
+# nit's diff gets the larger share of the width.
+set-hook -g after-split-window 'resize-pane -x 60%'
 TMUX
-# pi reads the code now, and pi-demo.ts hands what it read to the pi that's
-# recorded.
-pi -p --session-dir /tmp/nit-demo/prelude "understand the codebase" </dev/null >/dev/null || return
+# pi reads the code and the change now, and pi-demo.ts hands what it read to
+# the pi that's recorded.
+pi -p --session-dir /tmp/nit-demo/prelude "understand the codebase and the change in progress" </dev/null >/dev/null || return
 export NIT_DEMO_PRELUDE=$(ls /tmp/nit-demo/prelude/*.jsonl)

@@ -6,7 +6,7 @@
 //     in its transcript, as if the screen had been cleared.
 //   - Vertex AI sometimes takes several times as long as usual to start
 //     answering, so a request that hasn't started in HEDGE_MS goes out again,
-//     and pi gets whichever answers first.
+//     and pi gets the first answer that isn't an error.
 import { readFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -35,14 +35,25 @@ export default function (pi: ExtensionAPI) {
 	});
 }
 
+// pi gets the first try that answers without a 429 or 5xx, or the last try's
+// error once all TRIES have failed. A try that fails while none other is
+// pending sends the next one right away.
 function hedged(fetch: typeof globalThis.fetch, input: string | URL, init: RequestInit): Promise<Response> {
 	return new Promise((resolve, reject) => {
 		const tries: AbortController[] = [];
 		let done = false;
 		let failed = 0;
-		const finish = () => {
+		const finish = (ctl: AbortController, give: () => void) => {
 			done = true;
 			clearInterval(timer);
+			for (const other of tries) if (other !== ctl) other.abort();
+			give();
+		};
+		const fail = (ctl: AbortController, give: () => void) => {
+			if (done) return;
+			if (++failed === TRIES || init.signal?.aborted) return finish(ctl, give);
+			ctl.abort();
+			if (failed === tries.length) send();
 		};
 		const send = () => {
 			const ctl = new AbortController();
@@ -51,16 +62,10 @@ function hedged(fetch: typeof globalThis.fetch, input: string | URL, init: Reque
 			fetch(input, { ...init, signal }).then(
 				(res) => {
 					if (done) return ctl.abort();
-					finish();
-					for (const other of tries) if (other !== ctl) other.abort();
-					resolve(res);
+					if (res.status === 429 || res.status >= 500) return fail(ctl, () => resolve(res));
+					finish(ctl, () => resolve(res));
 				},
-				(err) => {
-					if (++failed === tries.length && !done) {
-						finish();
-						reject(err);
-					}
-				},
+				(err) => fail(ctl, () => reject(err)),
 			);
 		};
 		const timer = setInterval(() => tries.length < TRIES && send(), HEDGE_MS);
